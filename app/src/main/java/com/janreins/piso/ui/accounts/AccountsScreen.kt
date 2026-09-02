@@ -62,6 +62,7 @@ fun AccountsScreen(
     modifier: Modifier = Modifier
 ) {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val totalBalance = remember(accounts) { accounts.sumOf { it.balance } }
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -217,8 +218,17 @@ fun AccountsScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         IconButton(
-                                            onClick = { accountToDelete = account },
-                                            modifier = Modifier.size(32.dp)
+                                            onClick = {
+                                                val hasTransactions = transactions.any {
+                                                    it.accountId == account.id || it.transferToId == account.id
+                                                }
+                                                if (hasTransactions) {
+                                                    viewModel.showMessage("Move or delete this account’s activity first.")
+                                                } else {
+                                                    accountToDelete = account
+                                                }
+                                            },
+                                            modifier = Modifier.size(32.dp).testTag("account_delete_${account.id}")
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Delete,
@@ -267,7 +277,7 @@ fun AccountsScreen(
     accountToDelete?.let { accToDelete ->
         ConfirmDialog(
             title = "Delete Account?",
-            message = "Are you sure you want to delete ${accToDelete.name}? Existing transactions will remain.",
+            message = "Are you sure you want to delete ${accToDelete.name}?",
             confirmText = "Delete",
             isDestructive = true,
             onConfirm = {

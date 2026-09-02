@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -151,11 +152,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetWorthSummary())
 
-    // --- This Month Summary ---
-    val currentMonthSummary: StateFlow<MonthlySummary> = combine(
-        transactions,
-        _selectedMonthKey
-    ) { txList, _ ->
+    // --- This Month Summary (Always uses real current calendar month) ---
+    val currentMonthSummary: StateFlow<MonthlySummary> = transactions.map { txList ->
         val currentKey = DateUtil.getCurrentMonthKey()
         var incomeSum = 0.0
         var spentSum = 0.0
@@ -184,11 +182,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MonthlySummary())
 
     // --- Category Spending for Current Month ---
-    val currentMonthCategorySpending: StateFlow<Map<String, Double>> = transactions.combine(_selectedMonthKey) { txList, _ ->
+    val currentMonthCategorySpending: StateFlow<Map<String, Double>> = transactions.map { txList ->
         val currentKey = DateUtil.getCurrentMonthKey()
         val spending = mutableMapOf<String, Double>()
         for (tx in txList) {
-            if (DateUtil.getMonthKey(tx.dateMillis) == currentKey && tx.type == "EXPENSE" && tx.goalFlow == null) {
+            val isGoalMove = tx.goalId != null || tx.goalFlow != null
+            if (DateUtil.getMonthKey(tx.dateMillis) == currentKey && tx.type == "EXPENSE" && !isGoalMove) {
                 spending[tx.category] = (spending[tx.category] ?: 0.0) + tx.amount
             }
         }
@@ -199,18 +198,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addAccount(account: Account) {
         viewModelScope.launch {
             repository.insertAccount(account)
+            showMessage("Account created")
         }
     }
 
     fun updateAccount(account: Account) {
         viewModelScope.launch {
             repository.updateAccount(account)
+            showMessage("Account updated")
         }
     }
 
     fun deleteAccount(account: Account) {
         viewModelScope.launch {
+            val hasTx = repository.hasTransactionsForAccount(account.id)
+            if (hasTx) {
+                showMessage("Move or delete this account’s activity first.")
+                return@launch
+            }
             repository.deleteAccount(account)
+            showMessage("Account deleted")
         }
     }
 

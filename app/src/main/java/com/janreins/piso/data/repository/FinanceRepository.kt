@@ -46,7 +46,16 @@ class FinanceRepository(private val database: AppDatabase) {
 
     suspend fun updateAccount(account: Account) = accountDao.updateAccount(account)
 
-    suspend fun deleteAccount(account: Account) = accountDao.deleteAccount(account)
+    suspend fun hasTransactionsForAccount(accountId: Long): Boolean =
+        transactionDao.getTransactionCountForAccount(accountId) > 0
+
+    suspend fun deleteAccount(account: Account): Boolean {
+        if (hasTransactionsForAccount(account.id)) {
+            return false
+        }
+        accountDao.deleteAccount(account)
+        return true
+    }
 
     // --- Transactions & Balance Logic ---
     suspend fun addTransaction(tx: Transaction): Long {

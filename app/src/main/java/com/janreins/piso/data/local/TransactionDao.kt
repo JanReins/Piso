@@ -21,6 +21,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY dateMillis DESC, id DESC LIMIT :limit")
     fun getRecentTransactions(limit: Int): Flow<List<Transaction>>
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE accountId = :accountId OR transferToId = :accountId")
+    suspend fun getTransactionCountForAccount(accountId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: Transaction): Long
 

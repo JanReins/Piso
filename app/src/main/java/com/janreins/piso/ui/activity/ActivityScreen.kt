@@ -223,7 +223,15 @@ fun ActivityScreen(
 
                         PisoCard(
                             contentPadding = 14.dp,
-                            onClick = { transactionToEdit = tx }
+                            onClick = {
+                                if (tx.goalId != null || tx.goalFlow != null) {
+                                    viewModel.showMessage("Change this from the Goals tab")
+                                } else if (tx.debtId != null) {
+                                    viewModel.showMessage("Change this from the Debts section")
+                                } else {
+                                    transactionToEdit = tx
+                                }
+                            }
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

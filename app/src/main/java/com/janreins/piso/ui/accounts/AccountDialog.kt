@@ -1,8 +1,12 @@
 package com.janreins.piso.ui.accounts
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,7 +27,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,7 +48,7 @@ fun AccountDialog(
     var name by remember { mutableStateOf(initialAccount?.name ?: "") }
     var kind by remember { mutableStateOf(initialAccount?.kind ?: Categories.ACCOUNT_KINDS.first()) }
     var balanceText by remember {
-        mutableStateOf(if (initialAccount != null) CurrencyUtil.formatInputAmount(initialAccount.balance) else "")
+        mutableStateOf("")
     }
     var notes by remember { mutableStateOf(initialAccount?.notes ?: "") }
 
@@ -114,22 +120,46 @@ fun AccountDialog(
                     }
                 }
 
-                // Balance Field
-                OutlinedTextField(
-                    value = balanceText,
-                    onValueChange = {
-                        balanceText = it
-                        errorMessage = null
-                    },
-                    label = { Text(if (initialAccount == null) "Starting Balance (₱)" else "Current Balance (₱)") },
-                    placeholder = { Text("0.00") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("account_balance_input"),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                // Balance Field (Only editable on Account Creation)
+                if (initialAccount == null) {
+                    OutlinedTextField(
+                        value = balanceText,
+                        onValueChange = {
+                            balanceText = it
+                            errorMessage = null
+                        },
+                        label = { Text("Starting Balance (₱)") },
+                        placeholder = { Text("0.00") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("account_balance_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                } else {
+                    // Informational Read-Only Balance Box for Edit mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Current Balance",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = CurrencyUtil.formatPeso(initialAccount.balance),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
 
                 // Notes Field
                 OutlinedTextField(
@@ -160,14 +190,18 @@ fun AccountDialog(
                         errorMessage = "Account name cannot be blank."
                         return@Button
                     }
-                    val cleanBalance = balanceText.trim().replace(",", "").replace("₱", "")
-                    val parsedBalance = cleanBalance.toDoubleOrNull() ?: 0.0
+                    val finalBalance = if (initialAccount == null) {
+                        val cleanBalance = balanceText.trim().replace(",", "").replace("₱", "")
+                        cleanBalance.toDoubleOrNull() ?: 0.0
+                    } else {
+                        initialAccount.balance
+                    }
 
                     val account = Account(
                         id = initialAccount?.id ?: 0L,
                         name = name.trim(),
                         kind = kind,
-                        balance = parsedBalance,
+                        balance = finalBalance,
                         notes = notes.trim()
                     )
                     onSave(account)
