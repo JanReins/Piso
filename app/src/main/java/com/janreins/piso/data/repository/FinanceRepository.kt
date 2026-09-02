@@ -231,7 +231,7 @@ class FinanceRepository(private val database: AppDatabase) {
                 tx.accountId?.let { accId ->
                     val acc = accountDao.getAccountById(accId)
                     if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance - tx.amount))
+                        accountDao.updateAccount(acc.copy(balance = acc.balance + tx.amount))
                     }
                 }
                 // If it was linked to a debt payment, restore remaining debt amount
