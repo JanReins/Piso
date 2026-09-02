@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer coin circle -->
+    <path
+        android:fillColor="#14B8A6"
+        android:pathData="M54,24 A30,30 0 1,1 53.99,24 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,27 A27,27 0 1,1 53.99,27 Z" />
+    <!-- Peso 'P' with horizontal double bar -->
+    <!-- Vertical stem of P -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,38 H50 V70 H44 Z" />
+    <!-- P loop -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,38 H58 C64,38 68,42 68,48 C68,54 64,58 58,58 H48 Z M54,44 V52 H58 C60.5,52 62,50.5 62,48 C62,45.5 60.5,44 58,44 Z" />
+    <!-- Upper horizontal strike-through bar -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M40,44 H68 V47 H40 Z" />
+    <!-- Lower horizontal strike-through bar -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M40,50 H68 V53 H40 Z" />
+</vector>
