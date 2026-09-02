@@ -96,6 +96,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onResetAllData = {
                                 viewModel.clearAllDataAndReset()
+                            },
+                            getLockoutRemainingSeconds = {
+                                viewModel.getLockoutRemainingSeconds()
                             }
                         )
                     }

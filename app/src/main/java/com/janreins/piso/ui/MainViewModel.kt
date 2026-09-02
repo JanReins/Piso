@@ -69,6 +69,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val userProfile: StateFlow<UserProfile> = profileManager.userProfile
     val isAppLocked: StateFlow<Boolean> = profileManager.isLocked
 
+    private var _skipLockOnce = false
+    val skipLockOnce: Boolean
+        get() = _skipLockOnce
+
+    fun setSkipLockOnce(value: Boolean = true) {
+        _skipLockOnce = value
+    }
+
     fun createProfile(name: String, pin: String?) {
         profileManager.createProfile(name, pin)
         showMessage("Welcome to Piso, ${name.trim()}!")
@@ -79,11 +87,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showMessage("Profile name updated")
     }
 
+    fun getLockoutRemainingSeconds(): Int {
+        return profileManager.getLockoutRemainingSeconds()
+    }
+
     fun unlockApp(pin: String): Boolean {
         return profileManager.unlock(pin)
     }
 
     fun lockApp() {
+        _skipLockOnce = false
         if (profileManager.hasPin()) {
             profileManager.lock()
             showMessage("Piso locked")
@@ -93,6 +106,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onAppBackgrounded() {
+        if (_skipLockOnce) {
+            _skipLockOnce = false
+            return
+        }
         if (profileManager.hasPin()) {
             profileManager.lock()
         }

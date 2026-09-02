@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.local.ThemeMode
+import com.janreins.piso.data.local.isWeakPin
 import com.janreins.piso.data.models.BackupData
 import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
@@ -446,6 +447,7 @@ fun SettingsScreen(
                     ) {
                         Button(
                             onClick = {
+                                viewModel.setSkipLockOnce(true)
                                 val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                                 val filename = "Piso_Backup_$dateStr.json"
                                 createDocLauncher.launch(filename)
@@ -467,6 +469,7 @@ fun SettingsScreen(
 
                         OutlinedButton(
                             onClick = {
+                                viewModel.setSkipLockOnce(true)
                                 openDocLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
                             },
                             modifier = Modifier
@@ -627,6 +630,51 @@ fun SettingsScreen(
         var confirmPin by remember { mutableStateOf("") }
         var errorMsg by remember { mutableStateOf<String?>(null) }
         var isPinError by remember { mutableStateOf(false) }
+        var showWeakWarning by remember { mutableStateOf(false) }
+
+        if (showWeakWarning) {
+            AlertDialog(
+                onDismissRequest = {
+                    showWeakWarning = false
+                    newPin = ""
+                },
+                title = {
+                    Text(
+                        text = "Weak PIN",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "That PIN is easy to guess. Use it anyway?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showWeakWarning = false
+                            setPinStep = 2
+                            confirmPin = ""
+                        },
+                        modifier = Modifier.testTag("weak_pin_set_yes")
+                    ) {
+                        Text("Yes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showWeakWarning = false
+                            newPin = ""
+                        },
+                        modifier = Modifier.testTag("weak_pin_set_no")
+                    ) {
+                        Text("Choose a different PIN")
+                    }
+                }
+            )
+        }
 
         AlertDialog(
             onDismissRequest = { showSetPinDialog = false },
@@ -670,10 +718,15 @@ fun SettingsScreen(
                                 if (newPin.length < 4) {
                                     isPinError = false
                                     errorMsg = null
-                                    newPin += digit
-                                    if (newPin.length == 4) {
-                                        setPinStep = 2
-                                        confirmPin = ""
+                                    val entered = newPin + digit
+                                    newPin = entered
+                                    if (entered.length == 4) {
+                                        if (isWeakPin(entered)) {
+                                            showWeakWarning = true
+                                        } else {
+                                            setPinStep = 2
+                                            confirmPin = ""
+                                        }
                                     }
                                 }
                             } else {
@@ -742,6 +795,51 @@ fun SettingsScreen(
         var confirmPin by remember { mutableStateOf("") }
         var errorMsg by remember { mutableStateOf<String?>(null) }
         var isPinError by remember { mutableStateOf(false) }
+        var showWeakWarning by remember { mutableStateOf(false) }
+
+        if (showWeakWarning) {
+            AlertDialog(
+                onDismissRequest = {
+                    showWeakWarning = false
+                    newPin = ""
+                },
+                title = {
+                    Text(
+                        text = "Weak PIN",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "That PIN is easy to guess. Use it anyway?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showWeakWarning = false
+                            changePinStep = 3
+                            confirmPin = ""
+                        },
+                        modifier = Modifier.testTag("weak_pin_change_yes")
+                    ) {
+                        Text("Yes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showWeakWarning = false
+                            newPin = ""
+                        },
+                        modifier = Modifier.testTag("weak_pin_change_no")
+                    ) {
+                        Text("Choose a different PIN")
+                    }
+                }
+            )
+        }
 
         AlertDialog(
             onDismissRequest = { showChangePinDialog = false },
@@ -819,10 +917,15 @@ fun SettingsScreen(
                                     if (newPin.length < 4) {
                                         isPinError = false
                                         errorMsg = null
-                                        newPin += digit
-                                        if (newPin.length == 4) {
-                                            changePinStep = 3
-                                            confirmPin = ""
+                                        val entered = newPin + digit
+                                        newPin = entered
+                                        if (entered.length == 4) {
+                                            if (isWeakPin(entered)) {
+                                                showWeakWarning = true
+                                            } else {
+                                                changePinStep = 3
+                                                confirmPin = ""
+                                            }
                                         }
                                     }
                                 }
@@ -858,7 +961,17 @@ fun SettingsScreen(
                             }
                             isPinError = false
                             errorMsg = null
-                        }
+                        },
+                        onClearClick = if (changePinStep > 1) {
+                            {
+                                changePinStep = 2
+                                newPin = ""
+                                confirmPin = ""
+                                errorMsg = null
+                                isPinError = false
+                            }
+                        } else null,
+                        clearButtonText = if (changePinStep > 1) "Restart" else null
                     )
                 }
             },

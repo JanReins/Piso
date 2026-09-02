@@ -55,14 +55,14 @@ fun LockScreen(
     displayName: String,
     onUnlock: (pin: String) -> Boolean,
     onResetAllData: () -> Unit,
+    getLockoutRemainingSeconds: () -> Int = { 0 },
     modifier: Modifier = Modifier
 ) {
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isPinError by remember { mutableStateOf(false) }
 
-    var consecutiveFailedAttempts by remember { mutableIntStateOf(0) }
-    var lockoutSecondsRemaining by remember { mutableIntStateOf(0) }
+    var lockoutSecondsRemaining by remember { mutableIntStateOf(getLockoutRemainingSeconds()) }
 
     var showResetDialog by remember { mutableStateOf(false) }
     var resetInputText by remember { mutableStateOf("") }
@@ -70,12 +70,13 @@ fun LockScreen(
 
     val scrollState = rememberScrollState()
 
-    // Rate limiting countdown timer
+    // Rate limiting countdown timer persisting across rebuilds/rotations
     LaunchedEffect(lockoutSecondsRemaining) {
         if (lockoutSecondsRemaining > 0) {
             delay(1000L)
-            lockoutSecondsRemaining -= 1
-            if (lockoutSecondsRemaining == 0) {
+            val currentRemaining = getLockoutRemainingSeconds()
+            lockoutSecondsRemaining = currentRemaining
+            if (currentRemaining == 0) {
                 errorMessage = null
                 isPinError = false
             }
@@ -176,19 +177,17 @@ fun LockScreen(
                         if (newPin.length == 4) {
                             val success = onUnlock(newPin)
                             if (!success) {
-                                consecutiveFailedAttempts += 1
+                                val remainingLockout = getLockoutRemainingSeconds()
                                 isPinError = true
                                 enteredPin = ""
 
-                                if (consecutiveFailedAttempts >= 5) {
-                                    lockoutSecondsRemaining = 15
-                                    consecutiveFailedAttempts = 0
+                                if (remainingLockout > 0) {
+                                    lockoutSecondsRemaining = remainingLockout
                                     errorMessage = "Too many tries. Wait a moment."
                                 } else {
                                     errorMessage = "Wrong PIN. Try again."
                                 }
                             } else {
-                                consecutiveFailedAttempts = 0
                                 isPinError = false
                                 errorMessage = null
                             }

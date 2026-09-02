@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.janreins.piso.data.local.isWeakPin
 import com.janreins.piso.ui.components.PinDots
 import com.janreins.piso.ui.components.PinKeypad
 import com.janreins.piso.ui.components.PisoCard
@@ -66,11 +70,12 @@ fun WelcomeScreen(
     var name by remember { mutableStateOf("") }
     var enablePinLock by remember { mutableStateOf(false) }
 
-    // PIN Setup states
-    var pinStep by remember { mutableStateOf(1) } // 1: Enter PIN, 2: Confirm PIN, 3: Matched
+    // PIN Setup states: 1 = Enter PIN, 2 = Confirm PIN, 3 = Confirmed (Keypad collapses)
+    var pinStep by remember { mutableIntStateOf(1) }
     var initialPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
 
+    var showWeakPinWarning by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isPinError by remember { mutableStateOf(false) }
 
@@ -87,16 +92,16 @@ fun WelcomeScreen(
                 .padding(innerPadding)
                 .verticalScroll(scrollState)
                 .imePadding()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Top
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Logo Badge
+            // App Icon & Name
             Box(
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(54.dp)
                     .clip(CircleShape)
                     .background(TealContainer),
                 contentAlignment = Alignment.Center
@@ -105,49 +110,48 @@ fun WelcomeScreen(
                     imageVector = Icons.Default.AccountBalanceWallet,
                     contentDescription = null,
                     tint = TealPrimary,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // App Name & Tagline
             Text(
                 text = "Piso",
-                style = MaterialTheme.typography.headlineLarge.copy(
+                style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 36.sp
+                    fontSize = 30.sp
                 ),
                 color = TealPrimary
             )
 
             Text(
                 text = "Your private money book",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Local Profile Card
             PisoCard(
-                contentPadding = 18.dp,
-                cornerRadius = 24.dp
+                contentPadding = 16.dp,
+                cornerRadius = 20.dp
             ) {
+                // Name Input Field at the Top
                 Text(
-                    text = "Create Local Profile",
+                    text = "Welcome to Piso",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "This profile is kept 100% on your device. No cloud, no emails, no sign-ups.",
+                    text = "Everything is kept 100% offline on your device.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Name Input Field (Required)
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -164,12 +168,12 @@ fun WelcomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("welcome_name_input"),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Set a 4-digit PIN (optional) Toggle
+                // Optional 4-Digit PIN Toggle
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -185,7 +189,7 @@ fun WelcomeScreen(
                                 isPinError = false
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -197,17 +201,17 @@ fun WelcomeScreen(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
                             tint = TealPrimary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
                                 text = "Set a 4-digit PIN (optional)",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             )
                             Text(
                                 text = if (enablePinLock) "PIN lock active on app launch" else "App opens directly without lock",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -233,7 +237,7 @@ fun WelcomeScreen(
                     )
                 }
 
-                // PIN Keypad & Confirmation Steps
+                // PIN Setup Section
                 AnimatedVisibility(
                     visible = enablePinLock,
                     enter = fadeIn(),
@@ -242,7 +246,7 @@ fun WelcomeScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
+                            .padding(top = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         when (pinStep) {
@@ -252,7 +256,6 @@ fun WelcomeScreen(
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Step 1 of 2",
                                     style = MaterialTheme.typography.labelSmall,
@@ -262,7 +265,7 @@ fun WelcomeScreen(
                                 PinDots(
                                     pinLength = initialPin.length,
                                     isError = isPinError,
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    modifier = Modifier.padding(vertical = 6.dp)
                                 )
 
                                 PinKeypad(
@@ -270,11 +273,15 @@ fun WelcomeScreen(
                                         if (initialPin.length < 4) {
                                             isPinError = false
                                             errorMessage = null
-                                            initialPin += digit
-                                            if (initialPin.length == 4) {
-                                                // Advance to Step 2: Confirm PIN
-                                                pinStep = 2
-                                                confirmPin = ""
+                                            val newPin = initialPin + digit
+                                            initialPin = newPin
+                                            if (newPin.length == 4) {
+                                                if (isWeakPin(newPin)) {
+                                                    showWeakPinWarning = true
+                                                } else {
+                                                    pinStep = 2
+                                                    confirmPin = ""
+                                                }
                                             }
                                         }
                                     },
@@ -285,7 +292,7 @@ fun WelcomeScreen(
                                             errorMessage = null
                                         }
                                     },
-                                    modifier = Modifier.padding(top = 8.dp)
+                                    modifier = Modifier.padding(top = 4.dp)
                                 )
                             }
 
@@ -295,7 +302,6 @@ fun WelcomeScreen(
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Type it again to verify",
                                     style = MaterialTheme.typography.labelSmall,
@@ -305,7 +311,7 @@ fun WelcomeScreen(
                                 PinDots(
                                     pinLength = confirmPin.length,
                                     isError = isPinError,
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    modifier = Modifier.padding(vertical = 6.dp)
                                 )
 
                                 PinKeypad(
@@ -313,14 +319,14 @@ fun WelcomeScreen(
                                         if (confirmPin.length < 4) {
                                             isPinError = false
                                             errorMessage = null
-                                            confirmPin += digit
-                                            if (confirmPin.length == 4) {
-                                                if (confirmPin == initialPin) {
-                                                    // Matched!
+                                            val newConfirm = confirmPin + digit
+                                            confirmPin = newConfirm
+                                            if (newConfirm.length == 4) {
+                                                if (newConfirm == initialPin) {
+                                                    // Step 3: Confirmed! Keypad will collapse
                                                     pinStep = 3
                                                     errorMessage = null
                                                 } else {
-                                                    // Did not match
                                                     isPinError = true
                                                     errorMessage = "PINs do not match."
                                                     confirmPin = ""
@@ -336,7 +342,6 @@ fun WelcomeScreen(
                                         }
                                     },
                                     onClearClick = {
-                                        // Reset to step 1
                                         initialPin = ""
                                         confirmPin = ""
                                         pinStep = 1
@@ -344,33 +349,37 @@ fun WelcomeScreen(
                                         isPinError = false
                                     },
                                     clearButtonText = "Restart",
-                                    modifier = Modifier.padding(top = 8.dp)
+                                    modifier = Modifier.padding(top = 4.dp)
                                 )
                             }
 
                             3 -> {
-                                // PIN Successfully set
+                                // PIN Confirmed: Keypad collapses, showing compact green badge
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(TealContainer)
-                                        .padding(16.dp),
+                                        .padding(12.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = IncomeGreen,
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "4-digit PIN is set!",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = IncomeGreen,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "4-digit PIN is set!",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
                                     TextButton(
                                         onClick = {
                                             initialPin = ""
@@ -387,7 +396,7 @@ fun WelcomeScreen(
                 }
 
                 if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = errorMessage!!,
                         color = MaterialTheme.colorScheme.error,
@@ -396,7 +405,7 @@ fun WelcomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 PisoPrimaryButton(
                     text = "Start using Piso",
@@ -420,7 +429,7 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Offline Assurance
             Row(
@@ -431,7 +440,7 @@ fun WelcomeScreen(
                     imageVector = Icons.Default.Shield,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
@@ -441,7 +450,52 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+
+    // Weak PIN Dialog
+    if (showWeakPinWarning) {
+        AlertDialog(
+            onDismissRequest = {
+                showWeakPinWarning = false
+                initialPin = ""
+            },
+            title = {
+                Text(
+                    text = "Weak PIN",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    text = "That PIN is easy to guess. Use it anyway?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showWeakPinWarning = false
+                        pinStep = 2
+                        confirmPin = ""
+                    },
+                    modifier = Modifier.testTag("weak_pin_yes_button")
+                ) {
+                    Text("Yes")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showWeakPinWarning = false
+                        initialPin = ""
+                    },
+                    modifier = Modifier.testTag("weak_pin_no_button")
+                ) {
+                    Text("Choose a different PIN")
+                }
+            }
+        )
     }
 }

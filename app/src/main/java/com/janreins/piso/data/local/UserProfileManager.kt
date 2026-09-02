@@ -20,6 +20,10 @@ data class UserProfile(
     val themeMode: ThemeMode = ThemeMode.LIGHT
 )
 
+fun isWeakPin(pin: String): Boolean {
+    return pin in listOf("0000", "1111", "1234", "1212")
+}
+
 class UserProfileManager(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -80,6 +84,8 @@ class UserProfileManager(context: Context) {
         } else {
             editor.remove(KEY_PIN_HASH)
         }
+        editor.remove(KEY_FAILED_ATTEMPTS)
+        editor.remove(KEY_LOCKOUT_UNTIL)
         editor.apply()
         _userProfile.value = loadProfile()
         _isLocked.value = false
@@ -90,6 +96,39 @@ class UserProfileManager(context: Context) {
         _userProfile.value = loadProfile()
     }
 
+    fun getLockoutRemainingSeconds(): Int {
+        val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)
+        val now = System.currentTimeMillis()
+        return if (lockoutUntil > now) {
+            ((lockoutUntil - now + 999) / 1000).toInt()
+        } else {
+            0
+        }
+    }
+
+    fun recordFailedAttempt(): Int {
+        val currentAttempts = prefs.getInt(KEY_FAILED_ATTEMPTS, 0) + 1
+        val editor = prefs.edit()
+        if (currentAttempts >= 5) {
+            val lockoutUntil = System.currentTimeMillis() + 15_000L
+            editor.putLong(KEY_LOCKOUT_UNTIL, lockoutUntil)
+            editor.putInt(KEY_FAILED_ATTEMPTS, 0)
+            editor.apply()
+            return 15
+        } else {
+            editor.putInt(KEY_FAILED_ATTEMPTS, currentAttempts)
+            editor.apply()
+            return 0
+        }
+    }
+
+    fun resetFailedAttempts() {
+        prefs.edit()
+            .remove(KEY_FAILED_ATTEMPTS)
+            .remove(KEY_LOCKOUT_UNTIL)
+            .apply()
+    }
+
     fun verifyPin(pin: String): Boolean {
         val storedHash = prefs.getString(KEY_PIN_HASH, "") ?: ""
         if (storedHash.isBlank()) return true
@@ -98,11 +137,17 @@ class UserProfileManager(context: Context) {
     }
 
     fun unlock(pin: String): Boolean {
+        if (getLockoutRemainingSeconds() > 0) {
+            return false
+        }
         if (verifyPin(pin)) {
+            resetFailedAttempts()
             _isLocked.value = false
             return true
+        } else {
+            recordFailedAttempt()
+            return false
         }
-        return false
     }
 
     fun lock() {
@@ -114,6 +159,7 @@ class UserProfileManager(context: Context) {
     fun setPin(newPin: String) {
         if (newPin.length == 4) {
             prefs.edit().putString(KEY_PIN_HASH, hashPin(newPin)).apply()
+            resetFailedAttempts()
             _userProfile.value = loadProfile()
         }
     }
@@ -127,6 +173,7 @@ class UserProfileManager(context: Context) {
     fun removePin(oldPin: String): Boolean {
         if (!verifyPin(oldPin)) return false
         prefs.edit().remove(KEY_PIN_HASH).apply()
+        resetFailedAttempts()
         _userProfile.value = loadProfile()
         _isLocked.value = false
         return true
@@ -148,5 +195,7 @@ class UserProfileManager(context: Context) {
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
+        private const val KEY_LOCKOUT_UNTIL = "lockout_until"
     }
 }
