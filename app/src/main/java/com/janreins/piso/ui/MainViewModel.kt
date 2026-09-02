@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.janreins.piso.data.local.AppDatabase
+import com.janreins.piso.data.local.ThemeMode
+import com.janreins.piso.data.local.UserProfile
+import com.janreins.piso.data.local.UserProfileManager
 import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.Budget
 import com.janreins.piso.data.models.Debt
@@ -55,13 +58,77 @@ data class NetWorthSummary(
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
+    private val profileManager = UserProfileManager(application.applicationContext)
 
     init {
         val db = AppDatabase.getDatabase(application)
         repository = FinanceRepository(db)
     }
 
+    // --- Profile & Authentication State ---
+    val userProfile: StateFlow<UserProfile> = profileManager.userProfile
+    val isAppLocked: StateFlow<Boolean> = profileManager.isLocked
+
+    fun createProfile(name: String, password: String?) {
+        profileManager.createProfile(name, password)
+        showMessage("Welcome to Piso, ${name.trim()}!")
+    }
+
+    fun updateDisplayName(name: String) {
+        profileManager.updateDisplayName(name)
+        showMessage("Profile name updated")
+    }
+
+    fun unlockApp(password: String): Boolean {
+        return profileManager.unlock(password)
+    }
+
+    fun lockApp() {
+        if (profileManager.hasPassword()) {
+            profileManager.lock()
+            showMessage("Piso locked")
+        } else {
+            showMessage("Set a password first in Settings to enable lock.")
+        }
+    }
+
+    fun setPassword(password: String) {
+        profileManager.setPassword(password)
+        showMessage("Password set successfully")
+    }
+
+    fun changePassword(oldPass: String, newPass: String): Boolean {
+        val success = profileManager.changePassword(oldPass, newPass)
+        if (success) {
+            showMessage("Password changed successfully")
+        }
+        return success
+    }
+
+    fun removePassword(oldPass: String): Boolean {
+        val success = profileManager.removePassword(oldPass)
+        if (success) {
+            showMessage("Password removed")
+        }
+        return success
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        profileManager.setThemeMode(mode)
+    }
+
+    fun clearAllDataAndReset() {
+        viewModelScope.launch {
+            repository.clearAllData()
+            profileManager.clearProfile()
+            _currentTab.value = MainTab.HOME
+            _moreSubScreen.value = null
+            showMessage("Piso has been completely reset")
+        }
+    }
+
     // --- Navigation State ---
+
     private val _currentTab = MutableStateFlow(MainTab.HOME)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 

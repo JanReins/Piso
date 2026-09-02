@@ -50,6 +50,8 @@ import com.janreins.piso.ui.MoreSubScreen
 import com.janreins.piso.ui.accounts.AccountsScreen
 import com.janreins.piso.ui.activity.ActivityScreen
 import com.janreins.piso.ui.activity.TransactionDialog
+import com.janreins.piso.ui.auth.LockScreen
+import com.janreins.piso.ui.auth.WelcomeScreen
 import com.janreins.piso.ui.budgets.BudgetsScreen
 import com.janreins.piso.ui.debts.DebtsScreen
 import com.janreins.piso.ui.goals.GoalsScreen
@@ -71,8 +73,38 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            PisoTheme {
-                PisoApp(viewModel = viewModel)
+            val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+            val isAppLocked by viewModel.isAppLocked.collectAsStateWithLifecycle()
+
+            PisoTheme(themeMode = userProfile.themeMode) {
+                when {
+                    // 1. First Launch Welcome (No profile created yet)
+                    userProfile.displayName.isBlank() -> {
+                        WelcomeScreen(
+                            onStartUsingPiso = { name, password ->
+                                viewModel.createProfile(name, password)
+                            }
+                        )
+                    }
+
+                    // 2. Lock Screen (Profile exists, password enabled, app is locked)
+                    userProfile.hasPassword && isAppLocked -> {
+                        LockScreen(
+                            displayName = userProfile.displayName,
+                            onUnlock = { password ->
+                                viewModel.unlockApp(password)
+                            },
+                            onResetAllData = {
+                                viewModel.clearAllDataAndReset()
+                            }
+                        )
+                    }
+
+                    // 3. Main Piso Application (Unlocked)
+                    else -> {
+                        PisoApp(viewModel = viewModel)
+                    }
+                }
             }
         }
     }

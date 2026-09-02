@@ -82,10 +82,12 @@ fun HomeScreen(
     val openDebts by viewModel.openDebts.collectAsStateWithLifecycle()
     val recentTransactions by viewModel.recentTransactions.collectAsStateWithLifecycle()
     val categorySpending by viewModel.currentMonthCategorySpending.collectAsStateWithLifecycle()
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
 
     val currentMonthKey = DateUtil.getCurrentMonthKey()
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)
-    val greeting = DateUtil.getGreeting()
+    val baseGreeting = DateUtil.getGreeting()
+    val greeting = if (userProfile.displayName.isNotBlank()) "$baseGreeting, ${userProfile.displayName}" else baseGreeting
 
     LazyColumn(
         modifier = modifier
