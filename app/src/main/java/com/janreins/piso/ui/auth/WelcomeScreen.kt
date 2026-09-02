@@ -173,7 +173,7 @@ fun WelcomeScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Optional 4-Digit PIN Toggle
+                // Optional 6-Digit PIN Toggle
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

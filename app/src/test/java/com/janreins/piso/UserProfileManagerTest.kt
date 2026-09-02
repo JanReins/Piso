@@ -39,76 +39,77 @@ class UserProfileManagerTest {
 
     @Test
     fun testCreateProfileWithPin() {
-        manager.createProfile("Juan", "9876")
+        manager.createProfile("Juan", "987654")
         assertTrue(manager.hasProfile())
         assertTrue(manager.hasPin())
         assertEquals("Juan", manager.userProfile.value.displayName)
 
         // Verify correct and incorrect PINs
-        assertTrue(manager.verifyPin("9876"))
-        assertFalse(manager.verifyPin("0000"))
+        assertTrue(manager.verifyPin("987654"))
+        assertFalse(manager.verifyPin("000000"))
         assertFalse(manager.verifyPin("123"))
 
         // Lock & Unlock
         manager.lock()
         assertTrue(manager.isLocked.value)
 
-        val unlocked = manager.unlock("9876")
+        val unlocked = manager.unlock("987654")
         assertTrue(unlocked)
         assertFalse(manager.isLocked.value)
     }
 
     @Test
     fun testWeakPinDetection() {
-        assertTrue(isWeakPin("0000"))
-        assertTrue(isWeakPin("1111"))
-        assertTrue(isWeakPin("1234"))
-        assertTrue(isWeakPin("1212"))
+        assertTrue(isWeakPin("000000"))
+        assertTrue(isWeakPin("111111"))
+        assertTrue(isWeakPin("123456"))
+        assertTrue(isWeakPin("121212"))
+        assertTrue(isWeakPin("654321"))
 
-        assertFalse(isWeakPin("4829"))
-        assertFalse(isWeakPin("7391"))
-        assertFalse(isWeakPin("9999"))
+        assertFalse(isWeakPin("482910"))
+        assertFalse(isWeakPin("739182"))
+        assertFalse(isWeakPin("999999"))
     }
 
     @Test
     fun testLockoutAfterFiveFailedAttemptsAndPersistence() {
-        manager.createProfile("Juan", "5432")
+        manager.createProfile("Juan", "654987")
         assertEquals(0, manager.getLockoutRemainingSeconds())
 
         // 4 failed attempts: not locked out yet
         for (i in 1..4) {
-            assertFalse(manager.unlock("0000"))
+            assertFalse(manager.unlock("000000"))
             assertEquals(0, manager.getLockoutRemainingSeconds())
         }
 
-        // 5th failed attempt: triggers 15 second lockout
-        assertFalse(manager.unlock("0000"))
+        // 5th failed attempt: triggers 30 second lockout
+        assertFalse(manager.unlock("000000"))
         val remaining = manager.getLockoutRemainingSeconds()
-        assertTrue("Expected remaining seconds between 1 and 15, got $remaining", remaining in 1..15)
+        assertTrue("Expected remaining seconds between 1 and 30, got $remaining", remaining in 1..30)
 
         // Even correct PIN fails during lockout window
-        assertFalse(manager.unlock("5432"))
+        assertFalse(manager.unlock("654987"))
 
         // Recreate manager (simulating activity rebuild / phone rotation)
         val managerRebuilt = UserProfileManager(context)
         val rebuiltRemaining = managerRebuilt.getLockoutRemainingSeconds()
-        assertTrue("Expected rebuilt lockout to still be active", rebuiltRemaining in 1..15)
+        assertTrue("Expected rebuilt lockout to still be active", rebuiltRemaining in 1..30)
     }
 
     @Test
     fun testChangeAndRemovePin() {
-        manager.createProfile("Juan", "4321")
+        manager.createProfile("Juan", "654322")
 
-        val wrongChange = manager.changePin("9999", "5678")
+        val wrongChange = manager.changePin("999999", "567890")
         assertFalse(wrongChange)
-        assertTrue(manager.verifyPin("4321"))
+        assertTrue(manager.verifyPin("654322"))
 
-        val rightChange = manager.changePin("4321", "5678")
+        val rightChange = manager.changePin("654322", "567890")
         assertTrue(rightChange)
-        assertFalse(manager.verifyPin("4321"))
-        assertTrue(manager.verifyPin("5678"))
+        assertFalse(manager.verifyPin("654322"))
+        assertTrue(manager.verifyPin("567890"))
 
-        val removed = manager.removePin("5678")
+        val removed = manager.removePin("567890")
         assertTrue(removed)
         assertFalse(manager.hasPin())
     }
