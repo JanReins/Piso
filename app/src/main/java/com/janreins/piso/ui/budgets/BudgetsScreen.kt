@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +65,9 @@ fun BudgetsScreen(
     modifier: Modifier = Modifier
 ) {
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val categorySpending by viewModel.currentMonthCategorySpending.collectAsStateWithLifecycle()
+    val breakdownMap by viewModel.currentMonthBreakdownMap.collectAsStateWithLifecycle()
 
     val currentMonthKey = DateUtil.getCurrentMonthKey()
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)
@@ -187,6 +190,8 @@ fun BudgetsScreen(
                             else -> TealPrimary
                         }
 
+                        val breakdown = breakdownMap[budget.category]
+
                         PisoCard(
                             contentPadding = 16.dp,
                             onClick = { budgetToEdit = budget }
@@ -255,6 +260,38 @@ fun BudgetsScreen(
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                 color = statusColor
                             )
+
+                            // Subcategory spending breakdown if present
+                            if (breakdown != null && breakdown.subcategories.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    breakdown.subcategories.forEach { sub ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = sub.name,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = CurrencyUtil.formatPeso(sub.amount),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     item {
@@ -270,6 +307,7 @@ fun BudgetsScreen(
         BudgetDialog(
             monthKey = currentMonthKey,
             existingCategories = currentBudgets.map { it.category },
+            categories = categories,
             onDismiss = { showAddDialog = false },
             onSave = { newBudget ->
                 viewModel.addBudget(newBudget)
@@ -284,6 +322,7 @@ fun BudgetsScreen(
             initialBudget = currentBudget,
             monthKey = currentMonthKey,
             existingCategories = currentBudgets.map { it.category },
+            categories = categories,
             onDismiss = { budgetToEdit = null },
             onSave = { updatedBudget ->
                 viewModel.updateBudget(updatedBudget)

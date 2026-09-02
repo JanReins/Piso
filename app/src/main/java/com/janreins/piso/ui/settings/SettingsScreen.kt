@@ -26,7 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
@@ -72,6 +74,7 @@ import com.janreins.piso.data.local.ThemeMode
 import com.janreins.piso.data.local.isWeakPin
 import com.janreins.piso.data.models.BackupData
 import com.janreins.piso.ui.MainViewModel
+import com.janreins.piso.ui.MoreSubScreen
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PinDots
 import com.janreins.piso.ui.components.PinKeypad
@@ -420,7 +423,68 @@ fun SettingsScreen(
                 }
             }
 
-            // --- Section 4: Backup & Restore (Real Files + Fallback) ---
+            // --- Section 4: Categories & Subcategories ---
+            item {
+                Text(
+                    text = "Categories",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                PisoCard(
+                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.CATEGORIES) },
+                    contentPadding = 16.dp,
+                    modifier = Modifier.testTag("settings_categories_button")
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(TealContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Category,
+                                    contentDescription = null,
+                                    tint = TealPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Manage Categories",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = "Custom expense & income categories and subcategories",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // --- Section 5: Backup & Restore (Real Files + Fallback) ---
             item {
                 Text(
                     text = "Backup & Restore",

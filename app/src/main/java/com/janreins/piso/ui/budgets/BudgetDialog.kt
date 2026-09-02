@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.janreins.piso.data.models.Budget
 import com.janreins.piso.data.models.Categories
+import com.janreins.piso.data.models.UserCategory
 import com.janreins.piso.util.CurrencyUtil
 import com.janreins.piso.util.DateUtil
 
@@ -39,16 +40,22 @@ fun BudgetDialog(
     initialBudget: Budget? = null,
     monthKey: String = DateUtil.getCurrentMonthKey(),
     existingCategories: List<String> = emptyList(),
+    categories: List<UserCategory> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (Budget) -> Unit
 ) {
-    val availableCategories = remember(existingCategories, initialBudget) {
-        Categories.EXPENSE.filter { cat ->
+    val expenseCategories = remember(categories) {
+        val custom = categories.filter { it.kind.equals("EXPENSE", ignoreCase = true) && !it.isArchived }.map { it.name }
+        if (custom.isNotEmpty()) custom else Categories.EXPENSE
+    }
+
+    val availableCategories = remember(expenseCategories, existingCategories, initialBudget) {
+        expenseCategories.filter { cat ->
             cat == initialBudget?.category || !existingCategories.contains(cat)
         }
     }
 
-    var category by remember {
+    var category by remember(availableCategories) {
         mutableStateOf(initialBudget?.category ?: availableCategories.firstOrNull() ?: Categories.EXPENSE.first())
     }
     var limitText by remember {
@@ -101,7 +108,7 @@ fun BudgetDialog(
                         expanded = categoryDropdownExpanded,
                         onDismissRequest = { categoryDropdownExpanded = false }
                     ) {
-                        Categories.EXPENSE.forEach { cat ->
+                        availableCategories.forEach { cat ->
                             DropdownMenuItem(
                                 text = { Text(cat) },
                                 onClick = {

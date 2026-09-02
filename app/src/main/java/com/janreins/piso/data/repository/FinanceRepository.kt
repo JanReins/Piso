@@ -5,10 +5,13 @@ import com.janreins.piso.data.local.AppDatabase
 import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.BackupData
 import com.janreins.piso.data.models.Budget
+import com.janreins.piso.data.models.Categories
 import com.janreins.piso.data.models.Debt
 import com.janreins.piso.data.models.Goal
 import com.janreins.piso.data.models.Investment
 import com.janreins.piso.data.models.Transaction
+import com.janreins.piso.data.models.UserCategory
+import com.janreins.piso.data.models.UserSubcategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlin.math.max
@@ -24,6 +27,7 @@ class FinanceRepository(private val database: AppDatabase) {
     private val goalDao = database.goalDao()
     private val debtDao = database.debtDao()
     private val investmentDao = database.investmentDao()
+    private val categoryDao = database.categoryDao()
 
     // --- Flows ---
     val allAccounts: Flow<List<Account>> = accountDao.getAllAccounts()
@@ -34,12 +38,108 @@ class FinanceRepository(private val database: AppDatabase) {
     val allDebts: Flow<List<Debt>> = debtDao.getAllDebts()
     val openDebts: Flow<List<Debt>> = debtDao.getOpenDebts()
     val allInvestments: Flow<List<Investment>> = investmentDao.getAllInvestments()
+    val allCategories: Flow<List<UserCategory>> = categoryDao.getAllCategories()
+    val allSubcategories: Flow<List<UserSubcategory>> = categoryDao.getAllSubcategories()
 
     fun getRecentTransactions(limit: Int = 6): Flow<List<Transaction>> =
         transactionDao.getRecentTransactions(limit)
 
     fun getBudgetsForMonth(monthKey: String): Flow<List<Budget>> =
         budgetDao.getBudgetsForMonth(monthKey)
+
+    fun getCategoriesByKind(kind: String): Flow<List<UserCategory>> =
+        categoryDao.getCategoriesByKind(kind)
+
+    fun getSubcategoriesForParent(parentName: String): Flow<List<UserSubcategory>> =
+        categoryDao.getSubcategoriesForParent(parentName)
+
+    // --- Seeding Default Categories ---
+    suspend fun seedDefaultCategoriesIfEmpty() {
+        val existing = categoryDao.getAllCategories().first()
+        if (existing.isEmpty()) {
+            val expenseCats = Categories.EXPENSE.map {
+                UserCategory(name = it, kind = "EXPENSE", isArchived = false)
+            }
+            val incomeCats = Categories.INCOME.map {
+                UserCategory(name = it, kind = "INCOME", isArchived = false)
+            }
+            categoryDao.insertCategories(expenseCats + incomeCats)
+
+            val defaultFoodSubcategories = listOf(
+                UserSubcategory(parentCategoryName = "Food", name = "Groceries", isArchived = false),
+                UserSubcategory(parentCategoryName = "Food", name = "Dining out", isArchived = false),
+                UserSubcategory(parentCategoryName = "Food", name = "Coffee", isArchived = false)
+            )
+            categoryDao.insertSubcategories(defaultFoodSubcategories)
+        }
+    }
+
+    // --- User Category CRUD ---
+    suspend fun insertCategory(category: UserCategory): Long =
+        categoryDao.insertCategory(category)
+
+    suspend fun updateCategoryName(category: UserCategory, newName: String) {
+        val trimmedNewName = newName.trim()
+        if (trimmedNewName.isEmpty() || trimmedNewName == category.name) return
+        database.withTransaction {
+            categoryDao.updateCategory(category.copy(name = trimmedNewName))
+            categoryDao.updateSubcategoriesParentName(category.name, trimmedNewName)
+            categoryDao.updateTransactionsCategoryName(category.name, trimmedNewName)
+            categoryDao.updateBudgetsCategoryName(category.name, trimmedNewName)
+        }
+    }
+
+    suspend fun setCategoryArchived(category: UserCategory, isArchived: Boolean) {
+        categoryDao.updateCategory(category.copy(isArchived = isArchived))
+    }
+
+    suspend fun deleteCategory(category: UserCategory) {
+        database.withTransaction {
+            val count = categoryDao.countTransactionsForCategory(category.name)
+            if (count > 0) {
+                // If transactions use this category, archive it to keep historical data intact
+                categoryDao.updateCategory(category.copy(isArchived = true))
+            } else {
+                categoryDao.deleteCategory(category)
+            }
+        }
+    }
+
+    // --- User Subcategory CRUD ---
+    suspend fun insertSubcategory(subcategory: UserSubcategory): Long =
+        categoryDao.insertSubcategory(subcategory)
+
+    suspend fun updateSubcategoryName(subcategory: UserSubcategory, newName: String) {
+        val trimmedNewName = newName.trim()
+        if (trimmedNewName.isEmpty() || trimmedNewName == subcategory.name) return
+        database.withTransaction {
+            categoryDao.updateSubcategory(subcategory.copy(name = trimmedNewName))
+            categoryDao.updateTransactionsSubcategoryName(
+                subcategory.parentCategoryName,
+                subcategory.name,
+                trimmedNewName
+            )
+        }
+    }
+
+    suspend fun setSubcategoryArchived(subcategory: UserSubcategory, isArchived: Boolean) {
+        categoryDao.updateSubcategory(subcategory.copy(isArchived = isArchived))
+    }
+
+    suspend fun deleteSubcategory(subcategory: UserSubcategory) {
+        database.withTransaction {
+            val count = categoryDao.countTransactionsForSubcategory(
+                subcategory.parentCategoryName,
+                subcategory.name
+            )
+            if (count > 0) {
+                // Archive if referenced
+                categoryDao.updateSubcategory(subcategory.copy(isArchived = true))
+            } else {
+                categoryDao.deleteSubcategory(subcategory)
+            }
+        }
+    }
 
     // --- Accounts ---
     suspend fun insertAccount(account: Account): Long = accountDao.insertAccount(account)
@@ -131,7 +231,7 @@ class FinanceRepository(private val database: AppDatabase) {
                 tx.accountId?.let { accId ->
                     val acc = accountDao.getAccountById(accId)
                     if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance + tx.amount))
+                        accountDao.updateAccount(acc.copy(balance = acc.balance - tx.amount))
                     }
                 }
                 // If it was linked to a debt payment, restore remaining debt amount
@@ -172,13 +272,6 @@ class FinanceRepository(private val database: AppDatabase) {
     suspend fun updateGoal(goal: Goal) = goalDao.updateGoal(goal)
     suspend fun deleteGoal(goal: Goal) = goalDao.deleteGoal(goal)
 
-    /**
-     * Adds money to a goal:
-     * 1. Increases goal.currentAmount
-     * 2. If account is selected, subtracts amount from account balance
-     * 3. Creates an EXPENSE transaction with goalFlow = IN, goalId set
-     * 4. If currentAmount reaches target, marks completed
-     */
     suspend fun addMoneyToGoal(goalId: Long, amount: Double, fromAccountId: Long?): Boolean {
         return database.withTransaction {
             val goal = goalDao.getGoalById(goalId) ?: return@withTransaction false
@@ -202,6 +295,7 @@ class FinanceRepository(private val database: AppDatabase) {
                 dateMillis = System.currentTimeMillis(),
                 type = "EXPENSE",
                 category = "Savings",
+                subcategory = "",
                 amount = amount,
                 note = "Added to ${goal.name}",
                 accountId = fromAccountId,
@@ -218,12 +312,6 @@ class FinanceRepository(private val database: AppDatabase) {
     suspend fun updateDebt(debt: Debt) = debtDao.updateDebt(debt)
     suspend fun deleteDebt(debt: Debt) = debtDao.deleteDebt(debt)
 
-    /**
-     * Records a payment toward a debt:
-     * 1. Lowers remainingAmount
-     * 2. Subtracts amount from chosen account
-     * 3. Creates an EXPENSE category Debt with debtId set
-     */
     suspend fun recordDebtPayment(debtId: Long, amount: Double, fromAccountId: Long?) {
         database.withTransaction {
             val debt = debtDao.getDebtById(debtId) ?: return@withTransaction
@@ -241,6 +329,7 @@ class FinanceRepository(private val database: AppDatabase) {
                 dateMillis = System.currentTimeMillis(),
                 type = "EXPENSE",
                 category = "Debt",
+                subcategory = "",
                 amount = amount,
                 note = "Payment for ${debt.name}",
                 accountId = fromAccountId,
@@ -268,8 +357,19 @@ class FinanceRepository(private val database: AppDatabase) {
         val goals = goalDao.getAllGoals().first()
         val debts = debtDao.getAllDebts().first()
         val investments = investmentDao.getAllInvestments().first()
+        val categories = categoryDao.getAllCategories().first()
+        val subcategories = categoryDao.getAllSubcategories().first()
 
-        val data = BackupData(accounts, transactions, budgets, goals, debts, investments)
+        val data = BackupData(
+            accounts = accounts,
+            transactions = transactions,
+            budgets = budgets,
+            goals = goals,
+            debts = debts,
+            investments = investments,
+            categories = categories,
+            subcategories = subcategories
+        )
         return data.toJsonString()
     }
 
@@ -289,6 +389,15 @@ class FinanceRepository(private val database: AppDatabase) {
             goalDao.insertGoals(data.goals)
             debtDao.insertDebts(data.debts)
             investmentDao.insertInvestments(data.investments)
+
+            if (data.categories.isNotEmpty()) {
+                categoryDao.clearCategories()
+                categoryDao.clearSubcategories()
+                categoryDao.insertCategories(data.categories)
+                categoryDao.insertSubcategories(data.subcategories)
+            } else {
+                seedDefaultCategoriesIfEmpty()
+            }
             true
         }
     }
@@ -301,6 +410,10 @@ class FinanceRepository(private val database: AppDatabase) {
             goalDao.clearGoals()
             debtDao.clearDebts()
             investmentDao.clearInvestments()
+            // Reset categories to defaults
+            categoryDao.clearCategories()
+            categoryDao.clearSubcategories()
+            seedDefaultCategoriesIfEmpty()
         }
     }
 }

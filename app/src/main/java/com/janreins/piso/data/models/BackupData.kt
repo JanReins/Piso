@@ -12,11 +12,13 @@ data class BackupData(
     val budgets: List<Budget>,
     val goals: List<Goal>,
     val debts: List<Debt>,
-    val investments: List<Investment>
+    val investments: List<Investment>,
+    val categories: List<UserCategory> = emptyList(),
+    val subcategories: List<UserSubcategory> = emptyList()
 ) {
     fun toJsonString(): String {
         val root = JSONObject()
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("appName", "Piso")
         root.put("exportedAt", System.currentTimeMillis())
 
@@ -39,6 +41,7 @@ data class BackupData(
             obj.put("dateMillis", tx.dateMillis)
             obj.put("type", tx.type)
             obj.put("category", tx.category)
+            obj.put("subcategory", tx.subcategory)
             obj.put("amount", tx.amount)
             obj.put("note", tx.note)
             if (tx.accountId != null) obj.put("accountId", tx.accountId)
@@ -102,6 +105,28 @@ data class BackupData(
         }
         root.put("investments", invArr)
 
+        val catArr = JSONArray()
+        categories.forEach { cat ->
+            val obj = JSONObject()
+            obj.put("id", cat.id)
+            obj.put("name", cat.name)
+            obj.put("kind", cat.kind)
+            obj.put("isArchived", cat.isArchived)
+            catArr.put(obj)
+        }
+        root.put("categories", catArr)
+
+        val subcatArr = JSONArray()
+        subcategories.forEach { sub ->
+            val obj = JSONObject()
+            obj.put("id", sub.id)
+            obj.put("parentCategoryName", sub.parentCategoryName)
+            obj.put("name", sub.name)
+            obj.put("isArchived", sub.isArchived)
+            subcatArr.put(obj)
+        }
+        root.put("subcategories", subcatArr)
+
         return root.toString(2)
     }
 
@@ -135,6 +160,7 @@ data class BackupData(
                             dateMillis = obj.optLong("dateMillis", System.currentTimeMillis()),
                             type = obj.getString("type"),
                             category = obj.optString("category", ""),
+                            subcategory = obj.optString("subcategory", ""),
                             amount = obj.getDouble("amount"),
                             note = obj.optString("note", ""),
                             accountId = if (obj.has("accountId")) obj.getLong("accountId") else null,
@@ -210,7 +236,35 @@ data class BackupData(
                     )
                 }
 
-                BackupData(accounts, transactions, budgets, goals, debts, investments)
+                val categories = mutableListOf<UserCategory>()
+                val catArr = root.optJSONArray("categories") ?: JSONArray()
+                for (i in 0 until catArr.length()) {
+                    val obj = catArr.getJSONObject(i)
+                    categories.add(
+                        UserCategory(
+                            id = obj.optLong("id", 0L),
+                            name = obj.getString("name"),
+                            kind = obj.optString("kind", "EXPENSE"),
+                            isArchived = obj.optBoolean("isArchived", false)
+                        )
+                    )
+                }
+
+                val subcategories = mutableListOf<UserSubcategory>()
+                val subcatArr = root.optJSONArray("subcategories") ?: JSONArray()
+                for (i in 0 until subcatArr.length()) {
+                    val obj = subcatArr.getJSONObject(i)
+                    subcategories.add(
+                        UserSubcategory(
+                            id = obj.optLong("id", 0L),
+                            parentCategoryName = obj.getString("parentCategoryName"),
+                            name = obj.getString("name"),
+                            isArchived = obj.optBoolean("isArchived", false)
+                        )
+                    )
+                }
+
+                BackupData(accounts, transactions, budgets, goals, debts, investments, categories, subcategories)
             } catch (_: Exception) {
                 null
             }

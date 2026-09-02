@@ -74,6 +74,8 @@ fun ActivityScreen(
 ) {
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val subcategories by viewModel.subcategories.collectAsStateWithLifecycle()
     val selectedMonthKey by viewModel.selectedMonthKey.collectAsStateWithLifecycle()
     val activityFilter by viewModel.activityFilter.collectAsStateWithLifecycle()
 
@@ -286,6 +288,10 @@ fun ActivityScreen(
                                         )
                                         Text(
                                             text = buildString {
+                                                if (tx.type != "TRANSFER" && tx.subcategory.isNotBlank()) {
+                                                    append(tx.subcategory)
+                                                    append(" · ")
+                                                }
                                                 append(DateUtil.formatDate(tx.dateMillis))
                                                 if (accountName != null && tx.type != "TRANSFER") {
                                                     append(" · ")
@@ -346,6 +352,18 @@ fun ActivityScreen(
     if (showAddDialog) {
         TransactionDialog(
             accounts = accounts,
+            categories = categories,
+            subcategories = subcategories,
+            onAddCategory = { name, kind, onComplete ->
+                viewModel.addCategory(name, kind) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
+            onAddSubcategory = { parent, name, onComplete ->
+                viewModel.addSubcategory(parent, name) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
             onDismiss = { showAddDialog = false },
             onSave = { newTx ->
                 viewModel.addTransaction(newTx)
@@ -359,6 +377,18 @@ fun ActivityScreen(
         TransactionDialog(
             initialTransaction = currentTx,
             accounts = accounts,
+            categories = categories,
+            subcategories = subcategories,
+            onAddCategory = { name, kind, onComplete ->
+                viewModel.addCategory(name, kind) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
+            onAddSubcategory = { parent, name, onComplete ->
+                viewModel.addSubcategory(parent, name) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
             onDismiss = { transactionToEdit = null },
             onSave = { updatedTx ->
                 viewModel.updateTransaction(currentTx, updatedTx)

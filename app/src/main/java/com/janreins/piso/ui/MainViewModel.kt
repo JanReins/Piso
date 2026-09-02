@@ -13,6 +13,8 @@ import com.janreins.piso.data.models.Debt
 import com.janreins.piso.data.models.Goal
 import com.janreins.piso.data.models.Investment
 import com.janreins.piso.data.models.Transaction
+import com.janreins.piso.data.models.UserCategory
+import com.janreins.piso.data.models.UserSubcategory
 import com.janreins.piso.data.repository.FinanceRepository
 import com.janreins.piso.util.DateUtil
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -38,7 +41,8 @@ enum class MoreSubScreen {
     BUDGETS,
     DEBTS,
     INVEST,
-    SETTINGS
+    SETTINGS,
+    CATEGORIES
 }
 
 data class MonthlySummary(
@@ -55,6 +59,17 @@ data class NetWorthSummary(
     val debtsTotal: Double = 0.0
 )
 
+data class SubcategorySplit(
+    val name: String,
+    val amount: Double
+)
+
+data class CategorySpendingBreakdown(
+    val category: String,
+    val totalAmount: Double,
+    val subcategories: List<SubcategorySplit>
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
@@ -63,6 +78,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val db = AppDatabase.getDatabase(application)
         repository = FinanceRepository(db)
+        viewModelScope.launch {
+            repository.seedDefaultCategoriesIfEmpty()
+        }
     }
 
     // --- Profile & Authentication State ---
@@ -155,7 +173,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Navigation State ---
-
     private val _currentTab = MutableStateFlow(MainTab.HOME)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 
@@ -213,6 +230,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val investments: StateFlow<List<Investment>> = repository.allInvestments
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val categories: StateFlow<List<UserCategory>> = repository.allCategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val subcategories: StateFlow<List<UserSubcategory>> = repository.allSubcategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Activity Screen Filters ---
     private val _selectedMonthKey = MutableStateFlow(DateUtil.getCurrentMonthKey())
     val selectedMonthKey: StateFlow<String> = _selectedMonthKey.asStateFlow()
@@ -246,7 +269,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetWorthSummary())
 
-    // --- This Month Summary (Always uses real current calendar month) ---
+    // --- This Month Summary ---
     val currentMonthSummary: StateFlow<MonthlySummary> = transactions.map { txList ->
         val currentKey = DateUtil.getCurrentMonthKey()
         var incomeSum = 0.0
@@ -275,18 +298,187 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MonthlySummary())
 
-    // --- Category Spending for Current Month ---
+    // --- Category Spending for Current Month (Totals Map) ---
     val currentMonthCategorySpending: StateFlow<Map<String, Double>> = transactions.map { txList ->
         val currentKey = DateUtil.getCurrentMonthKey()
         val spending = mutableMapOf<String, Double>()
         for (tx in txList) {
             val isGoalMove = tx.goalId != null || tx.goalFlow != null
             if (DateUtil.getMonthKey(tx.dateMillis) == currentKey && tx.type == "EXPENSE" && !isGoalMove) {
-                spending[tx.category] = (spending[tx.category] ?: 0.0) + tx.amount
+                val cat = tx.category.ifBlank { "Other" }
+                spending[cat] = (spending[cat] ?: 0.0) + tx.amount
             }
         }
         spending
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // --- Detailed Spending Breakdown (Parent Category + Indented Subcategories) ---
+    val currentMonthSpendingBreakdown: StateFlow<List<CategorySpendingBreakdown>> = transactions.map { txList ->
+        val currentKey = DateUtil.getCurrentMonthKey()
+        val expenseTxs = txList.filter {
+            DateUtil.getMonthKey(it.dateMillis) == currentKey &&
+                it.type == "EXPENSE" &&
+                it.goalId == null &&
+                it.goalFlow == null
+        }
+
+        val grouped = expenseTxs.groupBy { it.category.ifBlank { "Other" } }
+
+        grouped.map { (catName, txs) ->
+            val total = txs.sumOf { it.amount }
+
+            // Check if any transactions in this category have a subcategory assigned
+            val hasSubcategories = txs.any { it.subcategory.isNotBlank() }
+            val splits = if (hasSubcategories) {
+                val subMap = mutableMapOf<String, Double>()
+                var unassigned = 0.0
+                for (tx in txs) {
+                    val sub = tx.subcategory.trim()
+                    if (sub.isNotBlank()) {
+                        subMap[sub] = (subMap[sub] ?: 0.0) + tx.amount
+                    } else {
+                        unassigned += tx.amount
+                    }
+                }
+                val list = subMap.entries
+                    .sortedByDescending { it.value }
+                    .map { SubcategorySplit(it.key, it.value) }
+                    .toMutableList()
+
+                if (unassigned > 0.0) {
+                    list.add(SubcategorySplit("Other", unassigned))
+                }
+                list
+            } else {
+                emptyList()
+            }
+
+            CategorySpendingBreakdown(
+                category = catName,
+                totalAmount = total,
+                subcategories = splits
+            )
+        }.sortedByDescending { it.totalAmount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Map for fast breakdown lookup on Budgets screen
+    val currentMonthBreakdownMap: StateFlow<Map<String, CategorySpendingBreakdown>> = currentMonthSpendingBreakdown.map { list ->
+        list.associateBy { it.category }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // --- Category CRUD Operations ---
+    fun addCategory(name: String, kind: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Category name cannot be empty")
+            return
+        }
+        viewModelScope.launch {
+            val existing = repository.allCategories.first()
+            if (existing.any { it.kind.equals(kind, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
+                onResult(false, "A $kind category named '$trimmed' already exists")
+                return@launch
+            }
+            val newCat = UserCategory(name = trimmed, kind = kind, isArchived = false)
+            repository.insertCategory(newCat)
+            showMessage("Category '$trimmed' added")
+            onResult(true, null)
+        }
+    }
+
+    fun updateCategoryName(category: UserCategory, newName: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Category name cannot be empty")
+            return
+        }
+        if (trimmed.equals(category.name, ignoreCase = true)) {
+            onResult(true, null)
+            return
+        }
+        viewModelScope.launch {
+            val existing = repository.allCategories.first()
+            if (existing.any { it.id != category.id && it.kind.equals(category.kind, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
+                onResult(false, "A ${category.kind} category named '$trimmed' already exists")
+                return@launch
+            }
+            repository.updateCategoryName(category, trimmed)
+            showMessage("Category updated")
+            onResult(true, null)
+        }
+    }
+
+    fun toggleCategoryArchived(category: UserCategory) {
+        viewModelScope.launch {
+            val nextArchived = !category.isArchived
+            repository.setCategoryArchived(category, nextArchived)
+            showMessage(if (nextArchived) "${category.name} archived" else "${category.name} unarchived")
+        }
+    }
+
+    fun deleteCategory(category: UserCategory) {
+        viewModelScope.launch {
+            repository.deleteCategory(category)
+            showMessage("Category removed")
+        }
+    }
+
+    // --- Subcategory CRUD Operations ---
+    fun addSubcategory(parentCategoryName: String, name: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Subcategory name cannot be empty")
+            return
+        }
+        viewModelScope.launch {
+            val existing = repository.allSubcategories.first()
+            if (existing.any { it.parentCategoryName.equals(parentCategoryName, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
+                onResult(false, "Subcategory '$trimmed' already exists under $parentCategoryName")
+                return@launch
+            }
+            val newSub = UserSubcategory(parentCategoryName = parentCategoryName, name = trimmed, isArchived = false)
+            repository.insertSubcategory(newSub)
+            showMessage("Subcategory '$trimmed' added")
+            onResult(true, null)
+        }
+    }
+
+    fun updateSubcategoryName(subcategory: UserSubcategory, newName: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Subcategory name cannot be empty")
+            return
+        }
+        if (trimmed.equals(subcategory.name, ignoreCase = true)) {
+            onResult(true, null)
+            return
+        }
+        viewModelScope.launch {
+            val existing = repository.allSubcategories.first()
+            if (existing.any { it.id != subcategory.id && it.parentCategoryName.equals(subcategory.parentCategoryName, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
+                onResult(false, "Subcategory '$trimmed' already exists under ${subcategory.parentCategoryName}")
+                return@launch
+            }
+            repository.updateSubcategoryName(subcategory, trimmed)
+            showMessage("Subcategory updated")
+            onResult(true, null)
+        }
+    }
+
+    fun toggleSubcategoryArchived(subcategory: UserSubcategory) {
+        viewModelScope.launch {
+            val nextArchived = !subcategory.isArchived
+            repository.setSubcategoryArchived(subcategory, nextArchived)
+            showMessage(if (nextArchived) "${subcategory.name} archived" else "${subcategory.name} unarchived")
+        }
+    }
+
+    fun deleteSubcategory(subcategory: UserSubcategory) {
+        viewModelScope.launch {
+            repository.deleteSubcategory(subcategory)
+            showMessage("Subcategory removed")
+        }
+    }
 
     // --- Account CRUD ---
     fun addAccount(account: Account) {

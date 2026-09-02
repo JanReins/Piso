@@ -76,6 +76,7 @@ fun HomeScreen(
 ) {
     val netWorth by viewModel.netWorthSummary.collectAsStateWithLifecycle()
     val monthSummary by viewModel.currentMonthSummary.collectAsStateWithLifecycle()
+    val spendingBreakdown by viewModel.currentMonthSpendingBreakdown.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val budgets by viewModel.budgets.collectAsStateWithLifecycle()
     val activeGoals by viewModel.activeGoals.collectAsStateWithLifecycle()
@@ -231,6 +232,117 @@ fun HomeScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                    }
+                }
+            }
+        }
+
+        // --- Spending by Category Breakdown ---
+        item {
+            PisoCard(
+                onClick = {
+                    viewModel.setActivityFilter("EXPENSE")
+                    viewModel.setSelectedMonthKey(currentMonthKey)
+                    viewModel.selectTab(MainTab.ACTIVITY)
+                },
+                contentPadding = 18.dp
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Spending by category",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "View all",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (spendingBreakdown.isEmpty()) {
+                    Text(
+                        text = "No expenses this month yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        spendingBreakdown.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                )
+                            }
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = item.category,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = CurrencyUtil.formatPeso(item.totalAmount),
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = ExpenseRed
+                                        )
+                                    )
+                                }
+
+                                if (item.subcategories.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        item.subcategories.forEach { sub ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = sub.name,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = CurrencyUtil.formatPeso(sub.amount),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -630,7 +742,13 @@ fun HomeScreen(
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                                     )
                                     Text(
-                                        text = if (tx.note.isNotBlank()) tx.note else DateUtil.formatDateShort(tx.dateMillis),
+                                        text = if (tx.type != "TRANSFER" && tx.subcategory.isNotBlank()) {
+                                            "${tx.subcategory}${if (tx.note.isNotBlank()) " · " + tx.note else ""}"
+                                        } else if (tx.note.isNotBlank()) {
+                                            tx.note
+                                        } else {
+                                            DateUtil.formatDateShort(tx.dateMillis)
+                                        },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

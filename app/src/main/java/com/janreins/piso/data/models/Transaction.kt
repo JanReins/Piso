@@ -13,6 +13,7 @@ data class Transaction(
     val dateMillis: Long = System.currentTimeMillis(),
     val type: String, // INCOME, EXPENSE, TRANSFER
     val category: String = "",
+    val subcategory: String = "",
     val amount: Double, // Always positive
     val note: String = "",
     val accountId: Long? = null,

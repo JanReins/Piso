@@ -13,15 +13,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +46,9 @@ import androidx.compose.ui.unit.sp
 import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.Categories
 import com.janreins.piso.data.models.Transaction
+import com.janreins.piso.data.models.UserCategory
+import com.janreins.piso.data.models.UserSubcategory
+import com.janreins.piso.ui.settings.CategoryInputDialog
 import com.janreins.piso.ui.theme.ExpenseRed
 import com.janreins.piso.ui.theme.IncomeGreen
 import com.janreins.piso.ui.theme.TealPrimary
@@ -55,6 +61,10 @@ fun TransactionDialog(
     initialTransaction: Transaction? = null,
     preselectedType: String = "EXPENSE",
     accounts: List<Account>,
+    categories: List<UserCategory> = emptyList(),
+    subcategories: List<UserSubcategory> = emptyList(),
+    onAddCategory: ((name: String, kind: String, onComplete: (String) -> Unit) -> Unit)? = null,
+    onAddSubcategory: ((parentName: String, name: String, onComplete: (String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Transaction) -> Unit
 ) {
@@ -64,11 +74,37 @@ fun TransactionDialog(
     var amountText by remember {
         mutableStateOf(if (initialTransaction != null) CurrencyUtil.formatInputAmount(initialTransaction.amount) else "")
     }
-    var category by remember {
-        mutableStateOf(
-            initialTransaction?.category ?: if (type == "INCOME") Categories.INCOME.first() else Categories.EXPENSE.first()
-        )
+
+    val availableCategories = remember(categories, type) {
+        val matching = categories.filter { it.kind.equals(type, ignoreCase = true) }
+        if (matching.isNotEmpty()) {
+            matching.map { it.name }
+        } else {
+            if (type == "INCOME") Categories.INCOME else Categories.EXPENSE
+        }
     }
+
+    var category by remember(type, availableCategories) {
+        val defaultCat = initialTransaction?.category
+            ?.takeIf { type == initialTransaction.type && it.isNotBlank() }
+            ?: availableCategories.firstOrNull()
+            ?: (if (type == "INCOME") "Salary" else "Food")
+        mutableStateOf(defaultCat)
+    }
+
+    val availableSubcategories = remember(subcategories, category) {
+        subcategories.filter {
+            it.parentCategoryName.equals(category, ignoreCase = true) && !it.isArchived
+        }.map { it.name }
+    }
+
+    var subcategory by remember(category) {
+        val initialSub = initialTransaction?.subcategory ?: ""
+        val initialParent = initialTransaction?.category ?: ""
+        val value = if (category.equals(initialParent, ignoreCase = true)) initialSub else ""
+        mutableStateOf(value)
+    }
+
     var note by remember {
         mutableStateOf(initialTransaction?.note ?: "")
     }
@@ -84,8 +120,12 @@ fun TransactionDialog(
     }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var subcategoryDropdownExpanded by remember { mutableStateOf(false) }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
     var transferToDropdownExpanded by remember { mutableStateOf(false) }
+
+    var showQuickAddCategoryDialog by remember { mutableStateOf(false) }
+    var showQuickAddSubcategoryDialog by remember { mutableStateOf(false) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -115,11 +155,7 @@ fun TransactionDialog(
                             selected = isSelected,
                             onClick = {
                                 type = typeKey
-                                if (typeKey == "INCOME" && !Categories.INCOME.contains(category)) {
-                                    category = Categories.INCOME.first()
-                                } else if (typeKey == "EXPENSE" && !Categories.EXPENSE.contains(category)) {
-                                    category = Categories.EXPENSE.first()
-                                }
+                                subcategory = ""
                             },
                             label = { Text(label) },
                             colors = FilterChipDefaults.filterChipColors(
@@ -154,7 +190,6 @@ fun TransactionDialog(
 
                 // Category Dropdown (Hidden for Transfer)
                 if (type != "TRANSFER") {
-                    val categoryList = if (type == "INCOME") Categories.INCOME else Categories.EXPENSE
                     ExposedDropdownMenuBox(
                         expanded = categoryDropdownExpanded,
                         onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded },
@@ -176,15 +211,122 @@ fun TransactionDialog(
                             expanded = categoryDropdownExpanded,
                             onDismissRequest = { categoryDropdownExpanded = false }
                         ) {
-                            categoryList.forEach { cat ->
+                            availableCategories.forEach { cat ->
                                 DropdownMenuItem(
                                     text = { Text(cat) },
                                     onClick = {
                                         category = cat
+                                        subcategory = ""
                                         categoryDropdownExpanded = false
                                     }
                                 )
                             }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = TealPrimary,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Text(
+                                            text = "Add category…",
+                                            color = TealPrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    categoryDropdownExpanded = false
+                                    showQuickAddCategoryDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    // Optional Subcategory Dropdown
+                    // Shown if the category has active subcategories OR if user wants to add one
+                    if (availableSubcategories.isNotEmpty() || subcategory.isNotBlank()) {
+                        ExposedDropdownMenuBox(
+                            expanded = subcategoryDropdownExpanded,
+                            onExpandedChange = { subcategoryDropdownExpanded = !subcategoryDropdownExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = if (subcategory.isBlank()) "None" else subcategory,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Subcategory (optional)") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subcategoryDropdownExpanded) },
+                                modifier = Modifier
+                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                                    .fillMaxWidth()
+                                    .testTag("transaction_subcategory_select"),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = subcategoryDropdownExpanded,
+                                onDismissRequest = { subcategoryDropdownExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("None (no subcategory)") },
+                                    onClick = {
+                                        subcategory = ""
+                                        subcategoryDropdownExpanded = false
+                                    }
+                                )
+                                availableSubcategories.forEach { sub ->
+                                    DropdownMenuItem(
+                                        text = { Text(sub) },
+                                        onClick = {
+                                            subcategory = sub
+                                            subcategoryDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = null,
+                                                tint = TealPrimary,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                            Text(
+                                                text = "Add subcategory…",
+                                                color = TealPrimary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        subcategoryDropdownExpanded = false
+                                        showQuickAddSubcategoryDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        // Small text button to add a subcategory under this category if none exist yet
+                        TextButton(
+                            onClick = { showQuickAddSubcategoryDialog = true },
+                            modifier = Modifier.align(Alignment.Start)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = TealPrimary,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                            Text(
+                                text = "Add subcategory under $category",
+                                fontSize = 13.sp,
+                                color = TealPrimary
+                            )
                         }
                     }
                 }
@@ -314,6 +456,7 @@ fun TransactionDialog(
                         dateMillis = dateMillis,
                         type = type,
                         category = if (type == "TRANSFER") "Transfer" else category.trim(),
+                        subcategory = if (type == "TRANSFER") "" else subcategory.trim(),
                         amount = parsedAmount,
                         note = note.trim(),
                         accountId = selectedAccountId,
@@ -339,4 +482,49 @@ fun TransactionDialog(
             }
         }
     )
+
+    // Quick Add Category Dialog
+    if (showQuickAddCategoryDialog) {
+        CategoryInputDialog(
+            title = "Add ${if (type == "INCOME") "Income" else "Expense"} Category",
+            initialName = "",
+            confirmText = "Add",
+            onDismiss = { showQuickAddCategoryDialog = false },
+            onConfirm = { newName ->
+                if (onAddCategory != null) {
+                    onAddCategory(newName, type) { createdName ->
+                        category = createdName
+                        subcategory = ""
+                        showQuickAddCategoryDialog = false
+                    }
+                } else {
+                    category = newName
+                    subcategory = ""
+                    showQuickAddCategoryDialog = false
+                }
+            }
+        )
+    }
+
+    // Quick Add Subcategory Dialog
+    if (showQuickAddSubcategoryDialog) {
+        CategoryInputDialog(
+            title = "Add Subcategory under $category",
+            initialName = "",
+            confirmText = "Add",
+            placeholder = "e.g. Groceries, Dining out",
+            onDismiss = { showQuickAddSubcategoryDialog = false },
+            onConfirm = { newSubName ->
+                if (onAddSubcategory != null) {
+                    onAddSubcategory(category, newSubName) { createdSubName ->
+                        subcategory = createdSubName
+                        showQuickAddSubcategoryDialog = false
+                    }
+                } else {
+                    subcategory = newSubName
+                    showQuickAddSubcategoryDialog = false
+                }
+            }
+        )
+    }
 }

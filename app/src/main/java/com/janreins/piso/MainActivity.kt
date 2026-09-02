@@ -58,6 +58,7 @@ import com.janreins.piso.ui.goals.GoalsScreen
 import com.janreins.piso.ui.home.HomeScreen
 import com.janreins.piso.ui.invest.InvestScreen
 import com.janreins.piso.ui.more.MoreScreen
+import com.janreins.piso.ui.settings.CategoriesScreen
 import com.janreins.piso.ui.settings.SettingsScreen
 import com.janreins.piso.ui.theme.PisoTheme
 import com.janreins.piso.ui.theme.TealContainer
@@ -131,6 +132,8 @@ fun PisoApp(viewModel: MainViewModel) {
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
     val moreSubScreen by viewModel.moreSubScreen.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val subcategories by viewModel.subcategories.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -224,6 +227,10 @@ fun PisoApp(viewModel: MainViewModel) {
                         viewModel = viewModel,
                         onBack = { viewModel.closeMoreSubScreen() }
                     )
+                    MoreSubScreen.CATEGORIES -> CategoriesScreen(
+                        viewModel = viewModel,
+                        onBack = { viewModel.openMoreSubScreen(MoreSubScreen.SETTINGS) }
+                    )
                     null -> {}
                 }
             } else {
@@ -255,6 +262,18 @@ fun PisoApp(viewModel: MainViewModel) {
         TransactionDialog(
             preselectedType = type,
             accounts = accounts,
+            categories = categories,
+            subcategories = subcategories,
+            onAddCategory = { name, kind, onComplete ->
+                viewModel.addCategory(name, kind) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
+            onAddSubcategory = { parent, name, onComplete ->
+                viewModel.addSubcategory(parent, name) { success, _ ->
+                    if (success) onComplete(name)
+                }
+            },
             onDismiss = { quickAddType = null },
             onSave = { newTx ->
                 viewModel.addTransaction(newTx)
