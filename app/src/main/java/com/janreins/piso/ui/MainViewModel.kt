@@ -91,6 +91,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return profileManager.getLockoutRemainingSeconds()
     }
 
+    fun verifyPin(pin: String): Boolean {
+        return profileManager.verifyPin(pin)
+    }
+
     fun unlockApp(pin: String): Boolean {
         return profileManager.unlock(pin)
     }

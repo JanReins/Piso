@@ -901,7 +901,7 @@ fun SettingsScreen(
                                         currentPin += digit
                                         if (currentPin.length == 4) {
                                             // Check current PIN
-                                            val valid = viewModel.unlockApp(currentPin)
+                                            val valid = viewModel.verifyPin(currentPin)
                                             if (valid) {
                                                 changePinStep = 2
                                                 newPin = ""
@@ -1116,7 +1116,7 @@ fun SettingsScreen(
     if (showClearConfirmDialog) {
         ConfirmDialog(
             title = "Clear All Data?",
-            message = "Are you completely sure? This will remove all your records and reset your money book to a fresh state.",
+            message = "This deletes accounts and money records. Your name, PIN, and theme stay.",
             confirmText = "Clear Everything",
             isDestructive = true,
             onConfirm = {
