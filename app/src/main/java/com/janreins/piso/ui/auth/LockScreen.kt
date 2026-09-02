@@ -128,7 +128,7 @@ fun LockScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Enter your 4-digit PIN",
+                text = "Enter your 6-digit PIN",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -145,7 +145,7 @@ fun LockScreen(
             // Error or Lockout Message
             if (lockoutSecondsRemaining > 0) {
                 Text(
-                    text = "Too many tries. Wait a moment (${lockoutSecondsRemaining}s).",
+                    text = "Too many tries. Wait a moment.",
                     color = ExpenseRed,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.padding(vertical = 6.dp)
@@ -167,14 +167,14 @@ fun LockScreen(
             PinKeypad(
                 isEnabled = lockoutSecondsRemaining == 0,
                 onDigitClick = { digit ->
-                    if (lockoutSecondsRemaining == 0 && enteredPin.length < 4) {
+                    if (lockoutSecondsRemaining == 0 && enteredPin.length < 6) {
                         isPinError = false
                         errorMessage = null
                         val newPin = enteredPin + digit
                         enteredPin = newPin
 
-                        // Check PIN automatically when 4 digits are entered
-                        if (newPin.length == 4) {
+                        // Check PIN automatically when 6 digits are entered
+                        if (newPin.length == 6) {
                             val success = onUnlock(newPin)
                             if (!success) {
                                 val remainingLockout = getLockoutRemainingSeconds()

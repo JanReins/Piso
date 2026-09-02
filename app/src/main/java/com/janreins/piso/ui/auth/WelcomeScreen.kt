@@ -206,7 +206,7 @@ fun WelcomeScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Set a 4-digit PIN (optional)",
+                                text = "Set a 6-digit PIN (optional)",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             )
                             Text(
@@ -252,7 +252,7 @@ fun WelcomeScreen(
                         when (pinStep) {
                             1 -> {
                                 Text(
-                                    text = "Enter a 4-digit PIN",
+                                    text = "Enter a 6-digit PIN",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -270,12 +270,12 @@ fun WelcomeScreen(
 
                                 PinKeypad(
                                     onDigitClick = { digit ->
-                                        if (initialPin.length < 4) {
+                                        if (initialPin.length < 6) {
                                             isPinError = false
                                             errorMessage = null
                                             val newPin = initialPin + digit
                                             initialPin = newPin
-                                            if (newPin.length == 4) {
+                                            if (newPin.length == 6) {
                                                 if (isWeakPin(newPin)) {
                                                     showWeakPinWarning = true
                                                 } else {
@@ -298,7 +298,7 @@ fun WelcomeScreen(
 
                             2 -> {
                                 Text(
-                                    text = "Confirm 4-digit PIN",
+                                    text = "Confirm 6-digit PIN",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -316,12 +316,12 @@ fun WelcomeScreen(
 
                                 PinKeypad(
                                     onDigitClick = { digit ->
-                                        if (confirmPin.length < 4) {
+                                        if (confirmPin.length < 6) {
                                             isPinError = false
                                             errorMessage = null
                                             val newConfirm = confirmPin + digit
                                             confirmPin = newConfirm
-                                            if (newConfirm.length == 4) {
+                                            if (newConfirm.length == 6) {
                                                 if (newConfirm == initialPin) {
                                                     // Step 3: Confirmed! Keypad will collapse
                                                     pinStep = 3
@@ -375,7 +375,7 @@ fun WelcomeScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "4-digit PIN is set!",
+                                            text = "6-digit PIN is set!",
                                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
@@ -416,8 +416,8 @@ fun WelcomeScreen(
                             return@PisoPrimaryButton
                         }
                         if (enablePinLock) {
-                            if (pinStep != 3 || initialPin.length != 4 || initialPin != confirmPin) {
-                                errorMessage = "Please finish setting your 4-digit PIN or turn off PIN lock."
+                            if (pinStep != 3 || initialPin.length != 6 || initialPin != confirmPin) {
+                                errorMessage = "Please finish setting your 6-digit PIN or turn off PIN lock."
                                 return@PisoPrimaryButton
                             }
                             onStartUsingPiso(cleanName, initialPin)

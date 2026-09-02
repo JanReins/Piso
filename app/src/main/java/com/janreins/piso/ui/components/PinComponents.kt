@@ -40,7 +40,7 @@ import kotlin.math.roundToInt
 @Composable
 fun PinDots(
     pinLength: Int,
-    maxDigits: Int = 4,
+    maxDigits: Int = 6,
     isError: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -69,7 +69,7 @@ fun PinDots(
         modifier = modifier
             .offset { IntOffset(shakeOffset.value.roundToInt(), 0) }
             .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (i in 0 until maxDigits) {
@@ -87,7 +87,7 @@ fun PinDots(
 
             Box(
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(18.dp)
                     .clip(CircleShape)
                     .background(dotColor)
                     .border(2.dp, borderColor, CircleShape)

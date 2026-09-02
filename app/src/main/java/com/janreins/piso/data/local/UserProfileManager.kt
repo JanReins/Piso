@@ -21,7 +21,7 @@ data class UserProfile(
 )
 
 fun isWeakPin(pin: String): Boolean {
-    return pin in listOf("0000", "1111", "1234", "1212")
+    return pin in listOf("000000", "111111", "123456", "121212", "654321")
 }
 
 class UserProfileManager(context: Context) {
@@ -79,7 +79,7 @@ class UserProfileManager(context: Context) {
     fun createProfile(displayName: String, pin: String?) {
         val editor = prefs.edit()
         editor.putString(KEY_DISPLAY_NAME, displayName.trim())
-        if (!pin.isNullOrBlank() && pin.length == 4) {
+        if (!pin.isNullOrBlank() && pin.length == 6) {
             editor.putString(KEY_PIN_HASH, hashPin(pin))
         } else {
             editor.remove(KEY_PIN_HASH)
@@ -109,17 +109,18 @@ class UserProfileManager(context: Context) {
     fun recordFailedAttempt(): Int {
         val currentAttempts = prefs.getInt(KEY_FAILED_ATTEMPTS, 0) + 1
         val editor = prefs.edit()
-        if (currentAttempts >= 5) {
-            val lockoutUntil = System.currentTimeMillis() + 15_000L
-            editor.putLong(KEY_LOCKOUT_UNTIL, lockoutUntil)
-            editor.putInt(KEY_FAILED_ATTEMPTS, 0)
-            editor.apply()
-            return 15
-        } else {
-            editor.putInt(KEY_FAILED_ATTEMPTS, currentAttempts)
-            editor.apply()
-            return 0
+        editor.putInt(KEY_FAILED_ATTEMPTS, currentAttempts)
+        val lockoutSeconds = when {
+            currentAttempts >= 10 -> 300 // 5 minutes
+            currentAttempts >= 5 -> 30   // 30 seconds
+            else -> 0
         }
+        if (lockoutSeconds > 0) {
+            val lockoutUntil = System.currentTimeMillis() + lockoutSeconds * 1000L
+            editor.putLong(KEY_LOCKOUT_UNTIL, lockoutUntil)
+        }
+        editor.apply()
+        return lockoutSeconds
     }
 
     fun resetFailedAttempts() {
@@ -157,7 +158,7 @@ class UserProfileManager(context: Context) {
     }
 
     fun setPin(newPin: String) {
-        if (newPin.length == 4) {
+        if (newPin.length == 6) {
             prefs.edit().putString(KEY_PIN_HASH, hashPin(newPin)).apply()
             resetFailedAttempts()
             _userProfile.value = loadProfile()

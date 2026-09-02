@@ -265,7 +265,7 @@ fun SettingsScreen(
                 }
             }
 
-            // --- Section 2: 4-Digit PIN Security ---
+            // --- Section 2: 6-Digit PIN Security ---
             item {
                 Text(
                     text = "Security & PIN Lock",
@@ -296,11 +296,11 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (userProfile.hasPin) "4-Digit PIN Active" else "No PIN Set",
+                                text = if (userProfile.hasPin) "6-Digit PIN Active" else "No PIN Set",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (userProfile.hasPin) "Lock screen requires 4-digit PIN on opening." else "Piso opens directly without PIN.",
+                                text = if (userProfile.hasPin) "Lock screen requires 6-digit PIN on opening." else "Piso opens directly without PIN.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -358,9 +358,18 @@ fun SettingsScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Password, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Set 4-Digit PIN")
+                            Text("Set 6-Digit PIN")
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Piso locks this phone only. It does not encrypt the money file. Use a 6-digit PIN you do not share, and export backups only to a place you trust.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        lineHeight = 16.sp
+                    )
                 }
             }
 
@@ -744,7 +753,7 @@ fun SettingsScreen(
             onDismissRequest = { showSetPinDialog = false },
             title = {
                 Text(
-                    text = if (setPinStep == 1) "Set 4-Digit PIN" else "Confirm 4-Digit PIN",
+                    text = if (setPinStep == 1) "Set 6-Digit PIN" else "Confirm 6-Digit PIN",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                 )
             },
@@ -754,7 +763,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (setPinStep == 1) "Enter a 4-digit PIN to lock Piso:" else "Type your 4-digit PIN again to verify:",
+                        text = if (setPinStep == 1) "Enter a 6-digit PIN to lock Piso:" else "Type your 6-digit PIN again to verify:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -779,12 +788,12 @@ fun SettingsScreen(
                     PinKeypad(
                         onDigitClick = { digit ->
                             if (setPinStep == 1) {
-                                if (newPin.length < 4) {
+                                if (newPin.length < 6) {
                                     isPinError = false
                                     errorMsg = null
                                     val entered = newPin + digit
                                     newPin = entered
-                                    if (entered.length == 4) {
+                                    if (entered.length == 6) {
                                         if (isWeakPin(entered)) {
                                             showWeakWarning = true
                                         } else {
@@ -794,11 +803,11 @@ fun SettingsScreen(
                                     }
                                 }
                             } else {
-                                if (confirmPin.length < 4) {
+                                if (confirmPin.length < 6) {
                                     isPinError = false
                                     errorMsg = null
                                     confirmPin += digit
-                                    if (confirmPin.length == 4) {
+                                    if (confirmPin.length == 6) {
                                         if (confirmPin == newPin) {
                                             viewModel.setPin(newPin)
                                             showSetPinDialog = false
@@ -911,7 +920,7 @@ fun SettingsScreen(
                 Text(
                     text = when (changePinStep) {
                         1 -> "Enter Current PIN"
-                        2 -> "Enter New 4-Digit PIN"
+                        2 -> "Enter New 6-Digit PIN"
                         else -> "Confirm New PIN"
                     },
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
@@ -924,8 +933,8 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = when (changePinStep) {
-                            1 -> "Type your current 4-digit PIN to proceed:"
-                            2 -> "Enter your new 4-digit PIN:"
+                            1 -> "Type your current 6-digit PIN to proceed:"
+                            2 -> "Enter your new 6-digit PIN:"
                             else -> "Type your new PIN again:"
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -959,11 +968,11 @@ fun SettingsScreen(
                         onDigitClick = { digit ->
                             when (changePinStep) {
                                 1 -> {
-                                    if (currentPin.length < 4) {
+                                    if (currentPin.length < 6) {
                                         isPinError = false
                                         errorMsg = null
                                         currentPin += digit
-                                        if (currentPin.length == 4) {
+                                        if (currentPin.length == 6) {
                                             // Check current PIN
                                             val valid = viewModel.verifyPin(currentPin)
                                             if (valid) {
@@ -978,12 +987,12 @@ fun SettingsScreen(
                                     }
                                 }
                                 2 -> {
-                                    if (newPin.length < 4) {
+                                    if (newPin.length < 6) {
                                         isPinError = false
                                         errorMsg = null
                                         val entered = newPin + digit
                                         newPin = entered
-                                        if (entered.length == 4) {
+                                        if (entered.length == 6) {
                                             if (isWeakPin(entered)) {
                                                 showWeakWarning = true
                                             } else {
@@ -994,11 +1003,11 @@ fun SettingsScreen(
                                     }
                                 }
                                 3 -> {
-                                    if (confirmPin.length < 4) {
+                                    if (confirmPin.length < 6) {
                                         isPinError = false
                                         errorMsg = null
                                         confirmPin += digit
-                                        if (confirmPin.length == 4) {
+                                        if (confirmPin.length == 6) {
                                             if (confirmPin == newPin) {
                                                 val success = viewModel.changePin(currentPin, newPin)
                                                 if (success) {
@@ -1059,14 +1068,14 @@ fun SettingsScreen(
 
         AlertDialog(
             onDismissRequest = { showRemovePinDialog = false },
-            title = { Text("Remove PIN Lock", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+            title = { Text("Remove PIN", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Enter your current 4-digit PIN to remove PIN lock from Piso:",
+                        text = "Enter your current 6-digit PIN to remove PIN lock from Piso:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1090,11 +1099,11 @@ fun SettingsScreen(
 
                     PinKeypad(
                         onDigitClick = { digit ->
-                            if (currentPin.length < 4) {
+                            if (currentPin.length < 6) {
                                 isPinError = false
                                 errorMsg = null
                                 currentPin += digit
-                                if (currentPin.length == 4) {
+                                if (currentPin.length == 6) {
                                     val success = viewModel.removePin(currentPin)
                                     if (success) {
                                         showRemovePinDialog = false
@@ -1217,6 +1226,13 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "This copy is not locked. Anyone with the file can read your amounts. Prefer Export File to a private folder.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        lineHeight = 16.sp
+                    )
                 }
             },
             confirmButton = {
