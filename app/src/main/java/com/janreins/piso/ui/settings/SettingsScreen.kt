@@ -24,15 +24,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrightnessAuto
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.LightMode
@@ -41,12 +38,8 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NoEncryption
 import androidx.compose.material.icons.filled.Password
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,9 +65,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,10 +72,11 @@ import com.janreins.piso.data.local.ThemeMode
 import com.janreins.piso.data.models.BackupData
 import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
+import com.janreins.piso.ui.components.PinDots
+import com.janreins.piso.ui.components.PinKeypad
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoTopBar
 import com.janreins.piso.ui.theme.ExpenseRed
-import com.janreins.piso.ui.theme.IncomeGreen
 import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
 import java.io.BufferedReader
@@ -104,9 +96,9 @@ fun SettingsScreen(
 
     // Dialog States
     var showEditNameDialog by remember { mutableStateOf(false) }
-    var showSetPasswordDialog by remember { mutableStateOf(false) }
-    var showChangePasswordDialog by remember { mutableStateOf(false) }
-    var showRemovePasswordDialog by remember { mutableStateOf(false) }
+    var showSetPinDialog by remember { mutableStateOf(false) }
+    var showChangePinDialog by remember { mutableStateOf(false) }
+    var showRemovePinDialog by remember { mutableStateOf(false) }
 
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var showExportTextDialog by remember { mutableStateOf<String?>(null) }
@@ -245,10 +237,10 @@ fun SettingsScreen(
 
                         Button(
                             onClick = {
-                                if (userProfile.hasPassword) {
+                                if (userProfile.hasPin) {
                                     viewModel.lockApp()
                                 } else {
-                                    showSetPasswordDialog = true
+                                    showSetPinDialog = true
                                 }
                             },
                             modifier = Modifier
@@ -269,10 +261,10 @@ fun SettingsScreen(
                 }
             }
 
-            // --- Section 2: Password Security ---
+            // --- Section 2: 4-Digit PIN Security ---
             item {
                 Text(
-                    text = "Security & App Lock",
+                    text = "Security & PIN Lock",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -287,24 +279,24 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(if (userProfile.hasPassword) TealContainer else MaterialTheme.colorScheme.surfaceVariant),
+                                .background(if (userProfile.hasPin) TealContainer else MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (userProfile.hasPassword) Icons.Default.Lock else Icons.Default.LockOpen,
+                                imageVector = if (userProfile.hasPin) Icons.Default.Lock else Icons.Default.LockOpen,
                                 contentDescription = null,
-                                tint = if (userProfile.hasPassword) TealPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (userProfile.hasPin) TealPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (userProfile.hasPassword) "Password Lock Active" else "No Password Set",
+                                text = if (userProfile.hasPin) "4-Digit PIN Active" else "No PIN Set",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (userProfile.hasPassword) "Lock screen requires password on opening." else "Piso opens directly without password.",
+                                text = if (userProfile.hasPin) "Lock screen requires 4-digit PIN on opening." else "Piso opens directly without PIN.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -313,30 +305,30 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    if (userProfile.hasPassword) {
+                    if (userProfile.hasPin) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { showChangePasswordDialog = true },
+                                onClick = { showChangePinDialog = true },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(42.dp)
-                                    .testTag("change_password_button"),
+                                    .testTag("change_pin_button"),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Icon(imageVector = Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Change", fontSize = 13.sp)
+                                Text("Change PIN", fontSize = 13.sp)
                             }
 
                             OutlinedButton(
-                                onClick = { showRemovePasswordDialog = true },
+                                onClick = { showRemovePinDialog = true },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(42.dp)
-                                    .testTag("remove_password_button"),
+                                    .testTag("remove_pin_button"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = ExpenseRed
@@ -344,16 +336,16 @@ fun SettingsScreen(
                             ) {
                                 Icon(imageVector = Icons.Default.NoEncryption, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Remove", fontSize = 13.sp)
+                                Text("Remove PIN", fontSize = 13.sp)
                             }
                         }
                     } else {
                         Button(
-                            onClick = { showSetPasswordDialog = true },
+                            onClick = { showSetPinDialog = true },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(44.dp)
-                                .testTag("set_password_button"),
+                                .testTag("set_pin_button"),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TealPrimary,
@@ -362,7 +354,7 @@ fun SettingsScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Password, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Set Password")
+                            Text("Set 4-Digit PIN")
                         }
                     }
                 }
@@ -628,88 +620,113 @@ fun SettingsScreen(
         )
     }
 
-    // 2. Set Password Dialog
-    if (showSetPasswordDialog) {
-        var newPass by remember { mutableStateOf("") }
-        var confirmPass by remember { mutableStateOf("") }
-        var showPass by remember { mutableStateOf(false) }
+    // 2. Set PIN Dialog
+    if (showSetPinDialog) {
+        var setPinStep by remember { mutableIntStateOf(1) } // 1: Enter, 2: Confirm
+        var newPin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
         var errorMsg by remember { mutableStateOf<String?>(null) }
+        var isPinError by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { showSetPasswordDialog = false },
-            title = { Text("Set Password Lock", style = MaterialTheme.typography.titleLarge) },
+            onDismissRequest = { showSetPinDialog = false },
+            title = {
+                Text(
+                    text = if (setPinStep == 1) "Set 4-Digit PIN" else "Confirm 4-Digit PIN",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "Create a password to lock Piso when the app opens.",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = if (setPinStep == 1) "Enter a 4-digit PIN to lock Piso:" else "Type your 4-digit PIN again to verify:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedTextField(
-                        value = newPass,
-                        onValueChange = {
-                            newPass = it
-                            errorMsg = null
-                        },
-                        label = { Text("New Password") },
-                        singleLine = true,
-                        visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth().testTag("set_password_input"),
-                        shape = RoundedCornerShape(12.dp)
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    PinDots(
+                        pinLength = if (setPinStep == 1) newPin.length else confirmPin.length,
+                        isError = isPinError
                     )
-                    OutlinedTextField(
-                        value = confirmPass,
-                        onValueChange = {
-                            confirmPass = it
-                            errorMsg = null
-                        },
-                        label = { Text("Confirm Password") },
-                        singleLine = true,
-                        visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showPass = !showPass }) {
-                                Icon(
-                                    imageVector = if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null
-                                )
+
+                    if (errorMsg != null) {
+                        Text(
+                            text = errorMsg!!,
+                            color = ExpenseRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    PinKeypad(
+                        onDigitClick = { digit ->
+                            if (setPinStep == 1) {
+                                if (newPin.length < 4) {
+                                    isPinError = false
+                                    errorMsg = null
+                                    newPin += digit
+                                    if (newPin.length == 4) {
+                                        setPinStep = 2
+                                        confirmPin = ""
+                                    }
+                                }
+                            } else {
+                                if (confirmPin.length < 4) {
+                                    isPinError = false
+                                    errorMsg = null
+                                    confirmPin += digit
+                                    if (confirmPin.length == 4) {
+                                        if (confirmPin == newPin) {
+                                            viewModel.setPin(newPin)
+                                            showSetPinDialog = false
+                                        } else {
+                                            isPinError = true
+                                            errorMsg = "PINs do not match."
+                                            confirmPin = ""
+                                        }
+                                    }
+                                }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().testTag("set_confirm_password_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        onDeleteClick = {
+                            if (setPinStep == 1) {
+                                if (newPin.isNotEmpty()) {
+                                    newPin = newPin.dropLast(1)
+                                    isPinError = false
+                                    errorMsg = null
+                                }
+                            } else {
+                                if (confirmPin.isNotEmpty()) {
+                                    confirmPin = confirmPin.dropLast(1)
+                                    isPinError = false
+                                    errorMsg = null
+                                }
+                            }
+                        },
+                        onClearClick = if (setPinStep == 2) {
+                            {
+                                setPinStep = 1
+                                newPin = ""
+                                confirmPin = ""
+                                errorMsg = null
+                                isPinError = false
+                            }
+                        } else null,
+                        clearButtonText = if (setPinStep == 2) "Restart" else null
                     )
-                    if (errorMsg != null) {
-                        Text(text = errorMsg!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newPass.isBlank()) {
-                            errorMsg = "Password cannot be blank."
-                            return@Button
-                        }
-                        if (newPass != confirmPass) {
-                            errorMsg = "Passwords do not match."
-                            return@Button
-                        }
-                        if (newPass.length < 4) {
-                            errorMsg = "Password should be at least 4 characters."
-                            return@Button
-                        }
-                        viewModel.setPassword(newPass)
-                        showSetPasswordDialog = false
-                    },
-                    modifier = Modifier.testTag("confirm_set_password_button")
-                ) {
-                    Text("Set Password")
-                }
-            },
+            confirmButton = {},
             dismissButton = {
                 TextButton(
-                    onClick = { showSetPasswordDialog = false },
-                    modifier = Modifier.testTag("cancel_set_password_button")
+                    onClick = { showSetPinDialog = false },
+                    modifier = Modifier.testTag("cancel_set_pin_button")
                 ) {
                     Text("Cancel")
                 }
@@ -717,106 +734,139 @@ fun SettingsScreen(
         )
     }
 
-    // 3. Change Password Dialog
-    if (showChangePasswordDialog) {
-        var currentPass by remember { mutableStateOf("") }
-        var newPass by remember { mutableStateOf("") }
-        var confirmPass by remember { mutableStateOf("") }
-        var showPass by remember { mutableStateOf(false) }
+    // 3. Change PIN Dialog
+    if (showChangePinDialog) {
+        var changePinStep by remember { mutableIntStateOf(1) } // 1: Current PIN, 2: New PIN, 3: Confirm New PIN
+        var currentPin by remember { mutableStateOf("") }
+        var newPin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
         var errorMsg by remember { mutableStateOf<String?>(null) }
+        var isPinError by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { showChangePasswordDialog = false },
-            title = { Text("Change Password", style = MaterialTheme.typography.titleLarge) },
+            onDismissRequest = { showChangePinDialog = false },
+            title = {
+                Text(
+                    text = when (changePinStep) {
+                        1 -> "Enter Current PIN"
+                        2 -> "Enter New 4-Digit PIN"
+                        else -> "Confirm New PIN"
+                    },
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = currentPass,
-                        onValueChange = {
-                            currentPass = it
-                            errorMsg = null
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = when (changePinStep) {
+                            1 -> "Type your current 4-digit PIN to proceed:"
+                            2 -> "Enter your new 4-digit PIN:"
+                            else -> "Type your new PIN again:"
                         },
-                        label = { Text("Current Password") },
-                        singleLine = true,
-                        visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth().testTag("change_current_password_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedTextField(
-                        value = newPass,
-                        onValueChange = {
-                            newPass = it
-                            errorMsg = null
-                        },
-                        label = { Text("New Password") },
-                        singleLine = true,
-                        visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth().testTag("change_new_password_input"),
-                        shape = RoundedCornerShape(12.dp)
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val activeLen = when (changePinStep) {
+                        1 -> currentPin.length
+                        2 -> newPin.length
+                        else -> confirmPin.length
+                    }
+
+                    PinDots(
+                        pinLength = activeLen,
+                        isError = isPinError
                     )
-                    OutlinedTextField(
-                        value = confirmPass,
-                        onValueChange = {
-                            confirmPass = it
-                            errorMsg = null
-                        },
-                        label = { Text("Confirm New Password") },
-                        singleLine = true,
-                        visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showPass = !showPass }) {
-                                Icon(
-                                    imageVector = if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null
-                                )
+
+                    if (errorMsg != null) {
+                        Text(
+                            text = errorMsg!!,
+                            color = ExpenseRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    PinKeypad(
+                        onDigitClick = { digit ->
+                            when (changePinStep) {
+                                1 -> {
+                                    if (currentPin.length < 4) {
+                                        isPinError = false
+                                        errorMsg = null
+                                        currentPin += digit
+                                        if (currentPin.length == 4) {
+                                            // Check current PIN
+                                            val valid = viewModel.unlockApp(currentPin)
+                                            if (valid) {
+                                                changePinStep = 2
+                                                newPin = ""
+                                            } else {
+                                                isPinError = true
+                                                errorMsg = "Incorrect current PIN."
+                                                currentPin = ""
+                                            }
+                                        }
+                                    }
+                                }
+                                2 -> {
+                                    if (newPin.length < 4) {
+                                        isPinError = false
+                                        errorMsg = null
+                                        newPin += digit
+                                        if (newPin.length == 4) {
+                                            changePinStep = 3
+                                            confirmPin = ""
+                                        }
+                                    }
+                                }
+                                3 -> {
+                                    if (confirmPin.length < 4) {
+                                        isPinError = false
+                                        errorMsg = null
+                                        confirmPin += digit
+                                        if (confirmPin.length == 4) {
+                                            if (confirmPin == newPin) {
+                                                val success = viewModel.changePin(currentPin, newPin)
+                                                if (success) {
+                                                    showChangePinDialog = false
+                                                } else {
+                                                    isPinError = true
+                                                    errorMsg = "Failed to update PIN."
+                                                }
+                                            } else {
+                                                isPinError = true
+                                                errorMsg = "PINs do not match."
+                                                confirmPin = ""
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().testTag("change_confirm_password_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        onDeleteClick = {
+                            when (changePinStep) {
+                                1 -> if (currentPin.isNotEmpty()) currentPin = currentPin.dropLast(1)
+                                2 -> if (newPin.isNotEmpty()) newPin = newPin.dropLast(1)
+                                3 -> if (confirmPin.isNotEmpty()) confirmPin = confirmPin.dropLast(1)
+                            }
+                            isPinError = false
+                            errorMsg = null
+                        }
                     )
-                    if (errorMsg != null) {
-                        Text(text = errorMsg!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (currentPass.isBlank()) {
-                            errorMsg = "Please enter your current password."
-                            return@Button
-                        }
-                        if (newPass.isBlank()) {
-                            errorMsg = "New password cannot be blank."
-                            return@Button
-                        }
-                        if (newPass != confirmPass) {
-                            errorMsg = "New passwords do not match."
-                            return@Button
-                        }
-                        if (newPass.length < 4) {
-                            errorMsg = "New password should be at least 4 characters."
-                            return@Button
-                        }
-                        val success = viewModel.changePassword(currentPass, newPass)
-                        if (success) {
-                            showChangePasswordDialog = false
-                        } else {
-                            errorMsg = "Incorrect current password."
-                        }
-                    },
-                    modifier = Modifier.testTag("confirm_change_password_button")
-                ) {
-                    Text("Change")
-                }
-            },
+            confirmButton = {},
             dismissButton = {
                 TextButton(
-                    onClick = { showChangePasswordDialog = false },
-                    modifier = Modifier.testTag("cancel_change_password_button")
+                    onClick = { showChangePinDialog = false },
+                    modifier = Modifier.testTag("cancel_change_pin_button")
                 ) {
                     Text("Cancel")
                 }
@@ -824,62 +874,76 @@ fun SettingsScreen(
         )
     }
 
-    // 4. Remove Password Dialog
-    if (showRemovePasswordDialog) {
-        var currentPass by remember { mutableStateOf("") }
+    // 4. Remove PIN Dialog
+    if (showRemovePinDialog) {
+        var currentPin by remember { mutableStateOf("") }
         var errorMsg by remember { mutableStateOf<String?>(null) }
+        var isPinError by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { showRemovePasswordDialog = false },
-            title = { Text("Remove Password Lock", style = MaterialTheme.typography.titleLarge) },
+            onDismissRequest = { showRemovePinDialog = false },
+            title = { Text("Remove PIN Lock", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Enter your current password to remove lock protection from Piso:",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedTextField(
-                        value = currentPass,
-                        onValueChange = {
-                            currentPass = it
-                            errorMsg = null
-                        },
-                        label = { Text("Current Password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth().testTag("remove_password_input"),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    if (errorMsg != null) {
-                        Text(text = errorMsg!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (currentPass.isBlank()) {
-                            errorMsg = "Please enter your password."
-                            return@Button
-                        }
-                        val success = viewModel.removePassword(currentPass)
-                        if (success) {
-                            showRemovePasswordDialog = false
-                        } else {
-                            errorMsg = "Incorrect password."
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
-                    modifier = Modifier.testTag("confirm_remove_password_button")
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Remove Lock")
+                    Text(
+                        text = "Enter your current 4-digit PIN to remove PIN lock from Piso:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    PinDots(
+                        pinLength = currentPin.length,
+                        isError = isPinError
+                    )
+
+                    if (errorMsg != null) {
+                        Text(
+                            text = errorMsg!!,
+                            color = ExpenseRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    PinKeypad(
+                        onDigitClick = { digit ->
+                            if (currentPin.length < 4) {
+                                isPinError = false
+                                errorMsg = null
+                                currentPin += digit
+                                if (currentPin.length == 4) {
+                                    val success = viewModel.removePin(currentPin)
+                                    if (success) {
+                                        showRemovePinDialog = false
+                                    } else {
+                                        isPinError = true
+                                        errorMsg = "Incorrect PIN."
+                                        currentPin = ""
+                                    }
+                                }
+                            }
+                        },
+                        onDeleteClick = {
+                            if (currentPin.isNotEmpty()) {
+                                currentPin = currentPin.dropLast(1)
+                                isPinError = false
+                                errorMsg = null
+                            }
+                        }
+                    )
                 }
             },
+            confirmButton = {},
             dismissButton = {
                 TextButton(
-                    onClick = { showRemovePasswordDialog = false },
-                    modifier = Modifier.testTag("cancel_remove_password_button")
+                    onClick = { showRemovePinDialog = false },
+                    modifier = Modifier.testTag("cancel_remove_pin_button")
                 ) {
                     Text("Cancel")
                 }

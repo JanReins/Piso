@@ -81,18 +81,18 @@ class MainActivity : ComponentActivity() {
                     // 1. First Launch Welcome (No profile created yet)
                     userProfile.displayName.isBlank() -> {
                         WelcomeScreen(
-                            onStartUsingPiso = { name, password ->
-                                viewModel.createProfile(name, password)
+                            onStartUsingPiso = { name, pin ->
+                                viewModel.createProfile(name, pin)
                             }
                         )
                     }
 
-                    // 2. Lock Screen (Profile exists, password enabled, app is locked)
-                    userProfile.hasPassword && isAppLocked -> {
+                    // 2. Lock Screen (Profile exists, PIN enabled, app is locked)
+                    userProfile.hasPin && isAppLocked -> {
                         LockScreen(
                             displayName = userProfile.displayName,
-                            onUnlock = { password ->
-                                viewModel.unlockApp(password)
+                            onUnlock = { pin ->
+                                viewModel.unlockApp(pin)
                             },
                             onResetAllData = {
                                 viewModel.clearAllDataAndReset()
@@ -107,6 +107,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppBackgrounded()
     }
 }
 

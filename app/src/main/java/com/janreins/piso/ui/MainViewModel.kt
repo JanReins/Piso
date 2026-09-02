@@ -69,8 +69,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val userProfile: StateFlow<UserProfile> = profileManager.userProfile
     val isAppLocked: StateFlow<Boolean> = profileManager.isLocked
 
-    fun createProfile(name: String, password: String?) {
-        profileManager.createProfile(name, password)
+    fun createProfile(name: String, pin: String?) {
+        profileManager.createProfile(name, pin)
         showMessage("Welcome to Piso, ${name.trim()}!")
     }
 
@@ -79,36 +79,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showMessage("Profile name updated")
     }
 
-    fun unlockApp(password: String): Boolean {
-        return profileManager.unlock(password)
+    fun unlockApp(pin: String): Boolean {
+        return profileManager.unlock(pin)
     }
 
     fun lockApp() {
-        if (profileManager.hasPassword()) {
+        if (profileManager.hasPin()) {
             profileManager.lock()
             showMessage("Piso locked")
         } else {
-            showMessage("Set a password first in Settings to enable lock.")
+            showMessage("Set a PIN first in Settings to enable lock.")
         }
     }
 
-    fun setPassword(password: String) {
-        profileManager.setPassword(password)
-        showMessage("Password set successfully")
+    fun onAppBackgrounded() {
+        if (profileManager.hasPin()) {
+            profileManager.lock()
+        }
     }
 
-    fun changePassword(oldPass: String, newPass: String): Boolean {
-        val success = profileManager.changePassword(oldPass, newPass)
+    fun setPin(pin: String) {
+        profileManager.setPin(pin)
+        showMessage("PIN set successfully")
+    }
+
+    fun changePin(oldPin: String, newPin: String): Boolean {
+        val success = profileManager.changePin(oldPin, newPin)
         if (success) {
-            showMessage("Password changed successfully")
+            showMessage("PIN changed successfully")
         }
         return success
     }
 
-    fun removePassword(oldPass: String): Boolean {
-        val success = profileManager.removePassword(oldPass)
+    fun removePin(oldPin: String): Boolean {
+        val success = profileManager.removePin(oldPin)
         if (success) {
-            showMessage("Password removed")
+            showMessage("PIN removed")
         }
         return success
     }

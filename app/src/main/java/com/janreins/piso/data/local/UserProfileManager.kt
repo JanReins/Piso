@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.security.MessageDigest
+import java.util.UUID
 
 enum class ThemeMode {
     LIGHT,
@@ -15,7 +16,7 @@ enum class ThemeMode {
 
 data class UserProfile(
     val displayName: String = "",
-    val hasPassword: Boolean = false,
+    val hasPin: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.LIGHT
 )
 
@@ -27,12 +28,12 @@ class UserProfileManager(context: Context) {
     private val _userProfile = MutableStateFlow(loadProfile())
     val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
 
-    private val _isLocked = MutableStateFlow(hasPassword())
+    private val _isLocked = MutableStateFlow(hasPin())
     val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
 
     private fun loadProfile(): UserProfile {
         val name = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
-        val hash = prefs.getString(KEY_PASSWORD_HASH, "") ?: ""
+        val hash = prefs.getString(KEY_PIN_HASH, "") ?: ""
         val themeStr = prefs.getString(KEY_THEME_MODE, ThemeMode.LIGHT.name) ?: ThemeMode.LIGHT.name
         val theme = try {
             ThemeMode.valueOf(themeStr)
@@ -41,7 +42,7 @@ class UserProfileManager(context: Context) {
         }
         return UserProfile(
             displayName = name,
-            hasPassword = hash.isNotBlank(),
+            hasPin = hash.isNotBlank(),
             themeMode = theme
         )
     }
@@ -50,18 +51,34 @@ class UserProfileManager(context: Context) {
         return _userProfile.value.displayName.isNotBlank()
     }
 
-    fun hasPassword(): Boolean {
-        val hash = prefs.getString(KEY_PASSWORD_HASH, "") ?: ""
+    fun hasPin(): Boolean {
+        val hash = prefs.getString(KEY_PIN_HASH, "") ?: ""
         return hash.isNotBlank()
     }
 
-    fun createProfile(displayName: String, password: String?) {
+    private fun getOrCreateSalt(): String {
+        var salt = prefs.getString(KEY_PIN_SALT, null)
+        if (salt.isNullOrBlank()) {
+            salt = UUID.randomUUID().toString()
+            prefs.edit().putString(KEY_PIN_SALT, salt).apply()
+        }
+        return salt
+    }
+
+    private fun hashPin(pin: String): String {
+        val salt = getOrCreateSalt()
+        val input = "piso_salt_${salt}_pin_$pin"
+        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    fun createProfile(displayName: String, pin: String?) {
         val editor = prefs.edit()
         editor.putString(KEY_DISPLAY_NAME, displayName.trim())
-        if (!password.isNullOrBlank()) {
-            editor.putString(KEY_PASSWORD_HASH, hashPassword(password))
+        if (!pin.isNullOrBlank() && pin.length == 4) {
+            editor.putString(KEY_PIN_HASH, hashPin(pin))
         } else {
-            editor.remove(KEY_PASSWORD_HASH)
+            editor.remove(KEY_PIN_HASH)
         }
         editor.apply()
         _userProfile.value = loadProfile()
@@ -73,15 +90,15 @@ class UserProfileManager(context: Context) {
         _userProfile.value = loadProfile()
     }
 
-    fun verifyPassword(password: String): Boolean {
-        val storedHash = prefs.getString(KEY_PASSWORD_HASH, "") ?: ""
+    fun verifyPin(pin: String): Boolean {
+        val storedHash = prefs.getString(KEY_PIN_HASH, "") ?: ""
         if (storedHash.isBlank()) return true
-        val inputHash = hashPassword(password)
+        val inputHash = hashPin(pin)
         return storedHash == inputHash
     }
 
-    fun unlock(password: String): Boolean {
-        if (verifyPassword(password)) {
+    fun unlock(pin: String): Boolean {
+        if (verifyPin(pin)) {
             _isLocked.value = false
             return true
         }
@@ -89,25 +106,27 @@ class UserProfileManager(context: Context) {
     }
 
     fun lock() {
-        if (hasPassword()) {
+        if (hasPin()) {
             _isLocked.value = true
         }
     }
 
-    fun setPassword(newPassword: String) {
-        prefs.edit().putString(KEY_PASSWORD_HASH, hashPassword(newPassword)).apply()
-        _userProfile.value = loadProfile()
+    fun setPin(newPin: String) {
+        if (newPin.length == 4) {
+            prefs.edit().putString(KEY_PIN_HASH, hashPin(newPin)).apply()
+            _userProfile.value = loadProfile()
+        }
     }
 
-    fun changePassword(oldPass: String, newPass: String): Boolean {
-        if (!verifyPassword(oldPass)) return false
-        setPassword(newPass)
+    fun changePin(oldPin: String, newPin: String): Boolean {
+        if (!verifyPin(oldPin)) return false
+        setPin(newPin)
         return true
     }
 
-    fun removePassword(oldPass: String): Boolean {
-        if (!verifyPassword(oldPass)) return false
-        prefs.edit().remove(KEY_PASSWORD_HASH).apply()
+    fun removePin(oldPin: String): Boolean {
+        if (!verifyPin(oldPin)) return false
+        prefs.edit().remove(KEY_PIN_HASH).apply()
         _userProfile.value = loadProfile()
         _isLocked.value = false
         return true
@@ -124,15 +143,10 @@ class UserProfileManager(context: Context) {
         _isLocked.value = false
     }
 
-    private fun hashPassword(password: String): String {
-        val input = "piso_salt_offline_$password"
-        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
-
     companion object {
         private const val KEY_DISPLAY_NAME = "display_name"
-        private const val KEY_PASSWORD_HASH = "password_hash"
+        private const val KEY_PIN_HASH = "pin_hash"
+        private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_THEME_MODE = "theme_mode"
     }
 }

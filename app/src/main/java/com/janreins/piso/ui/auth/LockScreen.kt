@@ -16,26 +16,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,33 +41,46 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.janreins.piso.ui.components.PisoCard
-import com.janreins.piso.ui.components.PisoPrimaryButton
+import com.janreins.piso.ui.components.PinDots
+import com.janreins.piso.ui.components.PinKeypad
 import com.janreins.piso.ui.theme.ExpenseRed
 import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
+import kotlinx.coroutines.delay
 
 @Composable
 fun LockScreen(
     displayName: String,
-    onUnlock: (password: String) -> Boolean,
+    onUnlock: (pin: String) -> Boolean,
     onResetAllData: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var password by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
+    var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isPinError by remember { mutableStateOf(false) }
+
+    var consecutiveFailedAttempts by remember { mutableIntStateOf(0) }
+    var lockoutSecondsRemaining by remember { mutableIntStateOf(0) }
+
     var showResetDialog by remember { mutableStateOf(false) }
     var resetInputText by remember { mutableStateOf("") }
     var resetError by remember { mutableStateOf<String?>(null) }
 
     val scrollState = rememberScrollState()
+
+    // Rate limiting countdown timer
+    LaunchedEffect(lockoutSecondsRemaining) {
+        if (lockoutSecondsRemaining > 0) {
+            delay(1000L)
+            lockoutSecondsRemaining -= 1
+            if (lockoutSecondsRemaining == 0) {
+                errorMessage = null
+                isPinError = false
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -83,16 +93,16 @@ fun LockScreen(
                 .padding(innerPadding)
                 .verticalScroll(scrollState)
                 .imePadding()
-                .padding(horizontal = 24.dp, vertical = 24.dp),
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Lock Icon
+            // Lock Icon Badge
             Box(
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(68.dp)
                     .clip(CircleShape)
                     .background(TealContainer),
                 contentAlignment = Alignment.Center
@@ -101,105 +111,103 @@ fun LockScreen(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
                     tint = TealPrimary,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(34.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Greeting
+            // Title & Subtitle
             Text(
                 text = "Welcome back, $displayName",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface
             )
 
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
-                text = "Enter your password to unlock Piso.",
+                text = "Enter your 4-digit PIN",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Password Card
-            PisoCard(
-                contentPadding = 20.dp,
-                cornerRadius = 24.dp
-            ) {
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        errorMessage = null
-                    },
-                    label = { Text("Password") },
-                    placeholder = { Text("Enter password") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = TealPrimary)
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (showPassword) "Hide password" else "Show password"
-                            )
-                        }
-                    },
-                    singleLine = true,
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            if (password.isBlank()) {
-                                errorMessage = "Please enter your password."
-                            } else {
-                                val success = onUnlock(password)
-                                if (!success) {
-                                    errorMessage = "Incorrect password. Please try again."
-                                }
-                            }
-                        }
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("lock_password_input"),
-                    shape = RoundedCornerShape(14.dp)
+            // PIN Dots Indicator
+            PinDots(
+                pinLength = enteredPin.length,
+                isError = isPinError,
+                modifier = Modifier.testTag("lock_pin_dots")
+            )
+
+            // Error or Lockout Message
+            if (lockoutSecondsRemaining > 0) {
+                Text(
+                    text = "Too many tries. Wait a moment (${lockoutSecondsRemaining}s).",
+                    color = ExpenseRed,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(vertical = 6.dp)
                 )
-
-                if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                PisoPrimaryButton(
-                    text = "Unlock",
-                    onClick = {
-                        if (password.isBlank()) {
-                            errorMessage = "Please enter your password."
-                        } else {
-                            val success = onUnlock(password)
-                            if (!success) {
-                                errorMessage = "Incorrect password. Please try again."
-                            }
-                        }
-                    },
-                    testTag = "lock_unlock_button"
+            } else if (errorMessage != null) {
+                Text(
+                    text = errorMessage!!,
+                    color = ExpenseRed,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    modifier = Modifier.padding(vertical = 6.dp)
                 )
+            } else {
+                Spacer(modifier = Modifier.height(26.dp))
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Big Number Pad (0-9 + delete key)
+            PinKeypad(
+                isEnabled = lockoutSecondsRemaining == 0,
+                onDigitClick = { digit ->
+                    if (lockoutSecondsRemaining == 0 && enteredPin.length < 4) {
+                        isPinError = false
+                        errorMessage = null
+                        val newPin = enteredPin + digit
+                        enteredPin = newPin
+
+                        // Check PIN automatically when 4 digits are entered
+                        if (newPin.length == 4) {
+                            val success = onUnlock(newPin)
+                            if (!success) {
+                                consecutiveFailedAttempts += 1
+                                isPinError = true
+                                enteredPin = ""
+
+                                if (consecutiveFailedAttempts >= 5) {
+                                    lockoutSecondsRemaining = 15
+                                    consecutiveFailedAttempts = 0
+                                    errorMessage = "Too many tries. Wait a moment."
+                                } else {
+                                    errorMessage = "Wrong PIN. Try again."
+                                }
+                            } else {
+                                consecutiveFailedAttempts = 0
+                                isPinError = false
+                                errorMessage = null
+                            }
+                        }
+                    }
+                },
+                onDeleteClick = {
+                    if (lockoutSecondsRemaining == 0 && enteredPin.isNotEmpty()) {
+                        enteredPin = enteredPin.dropLast(1)
+                        isPinError = false
+                        errorMessage = null
+                    }
+                },
+                modifier = Modifier.testTag("lock_pin_keypad")
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Forgot Password / Recovery Note
+            // Offline Recovery Honest Message & Reset
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -207,7 +215,7 @@ fun LockScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Piso cannot recover a forgotten password because it is offline. You can keep using the app only after the correct password, or clear all data from this lock screen.",
+                    text = "Piso cannot recover a forgotten PIN because it is offline. You can keep using the app only after the correct PIN, or clear all data from this lock screen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                     lineHeight = 18.sp
