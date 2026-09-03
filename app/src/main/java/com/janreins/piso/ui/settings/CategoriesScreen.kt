@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,24 +64,23 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.models.UserCategory
 import com.janreins.piso.data.models.UserSubcategory
-import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoTopBar
 import com.janreins.piso.ui.theme.ExpenseContainer
 import com.janreins.piso.ui.theme.ExpenseRed
 import com.janreins.piso.ui.theme.IncomeContainer
 import com.janreins.piso.ui.theme.IncomeGreen
-import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
 
 @Composable
 fun CategoriesScreen(
-    viewModel: MainViewModel,
+    viewModel: SettingsViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val subcategories by viewModel.subcategories.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val categories = uiState.categories
+    val subcategories = uiState.subcategories
 
     var selectedTabIndex by remember { mutableStateOf(0) } // 0: Expense, 1: Income
     val currentKind = if (selectedTabIndex == 0) "EXPENSE" else "INCOME"

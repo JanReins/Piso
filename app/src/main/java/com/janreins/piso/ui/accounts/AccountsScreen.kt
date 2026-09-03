@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Savings
@@ -44,10 +43,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.models.Account
-import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoEmptyState
@@ -58,11 +55,13 @@ import com.janreins.piso.util.CurrencyUtil
 
 @Composable
 fun AccountsScreen(
-    viewModel: MainViewModel,
+    viewModel: AccountsViewModel,
     modifier: Modifier = Modifier
 ) {
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val transactions by viewModel.transactions.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val accounts = uiState.accounts
+    val transactions = uiState.transactions
     val totalBalance = remember(accounts) { accounts.sumOf { it.balance } }
 
     var showAddDialog by remember { mutableStateOf(false) }

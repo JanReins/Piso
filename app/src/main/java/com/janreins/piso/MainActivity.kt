@@ -45,30 +45,41 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.janreins.piso.ui.MainTab
-import com.janreins.piso.ui.MainViewModel
-import com.janreins.piso.ui.MoreSubScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.janreins.piso.ui.accounts.AccountsScreen
+import com.janreins.piso.ui.accounts.AccountsViewModel
 import com.janreins.piso.ui.activity.ActivityScreen
+import com.janreins.piso.ui.activity.ActivityViewModel
 import com.janreins.piso.ui.activity.TransactionDialog
+import com.janreins.piso.ui.app.AppViewModel
 import com.janreins.piso.ui.auth.LockScreen
 import com.janreins.piso.ui.auth.WelcomeScreen
 import com.janreins.piso.ui.budgets.BudgetsScreen
+import com.janreins.piso.ui.budgets.BudgetsViewModel
 import com.janreins.piso.ui.debts.DebtsScreen
+import com.janreins.piso.ui.debts.DebtsViewModel
 import com.janreins.piso.ui.goals.GoalsScreen
+import com.janreins.piso.ui.goals.GoalsViewModel
 import com.janreins.piso.ui.home.HomeScreen
+import com.janreins.piso.ui.home.HomeViewModel
 import com.janreins.piso.ui.invest.InvestScreen
+import com.janreins.piso.ui.invest.InvestViewModel
 import com.janreins.piso.ui.more.MoreScreen
+import com.janreins.piso.ui.more.MoreViewModel
 import com.janreins.piso.ui.settings.CategoriesScreen
 import com.janreins.piso.ui.settings.SettingsScreen
+import com.janreins.piso.ui.settings.SettingsViewModel
+import com.janreins.piso.ui.state.MainTab
+import com.janreins.piso.ui.state.MoreSubScreen
 import com.janreins.piso.ui.theme.PisoTheme
 import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.merge
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    private val appViewModel: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,8 +87,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
-            val isAppLocked by viewModel.isAppLocked.collectAsStateWithLifecycle()
+            val userProfile by appViewModel.userProfile.collectAsStateWithLifecycle()
+            val isAppLocked by appViewModel.isAppLocked.collectAsStateWithLifecycle()
 
             PisoTheme(themeMode = userProfile.themeMode) {
                 when {
@@ -85,7 +96,7 @@ class MainActivity : ComponentActivity() {
                     userProfile.displayName.isBlank() -> {
                         WelcomeScreen(
                             onStartUsingPiso = { name, pin ->
-                                viewModel.createProfile(name, pin)
+                                appViewModel.createProfile(name, pin)
                             }
                         )
                     }
@@ -95,20 +106,20 @@ class MainActivity : ComponentActivity() {
                         LockScreen(
                             displayName = userProfile.displayName,
                             onUnlock = { pin ->
-                                viewModel.unlockApp(pin)
+                                appViewModel.unlockApp(pin)
                             },
                             onResetAllData = {
-                                viewModel.clearAllDataAndReset()
+                                appViewModel.clearAllDataAndReset()
                             },
                             getLockoutRemainingSeconds = {
-                                viewModel.getLockoutRemainingSeconds()
+                                appViewModel.getLockoutRemainingSeconds()
                             }
                         )
                     }
 
                     // 3. Main Piso Application (Unlocked)
                     else -> {
-                        PisoApp(viewModel = viewModel)
+                        PisoApp(appViewModel = appViewModel)
                     }
                 }
             }
@@ -117,7 +128,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        viewModel.onAppBackgrounded()
+        appViewModel.onAppBackgrounded()
     }
 }
 
@@ -130,12 +141,25 @@ data class NavigationTabItem(
 )
 
 @Composable
-fun PisoApp(viewModel: MainViewModel) {
-    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
-    val moreSubScreen by viewModel.moreSubScreen.collectAsStateWithLifecycle()
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val subcategories by viewModel.subcategories.collectAsStateWithLifecycle()
+fun PisoApp(
+    appViewModel: AppViewModel = viewModel(),
+    homeViewModel: HomeViewModel = viewModel(),
+    activityViewModel: ActivityViewModel = viewModel(),
+    accountsViewModel: AccountsViewModel = viewModel(),
+    goalsViewModel: GoalsViewModel = viewModel(),
+    budgetsViewModel: BudgetsViewModel = viewModel(),
+    debtsViewModel: DebtsViewModel = viewModel(),
+    investViewModel: InvestViewModel = viewModel(),
+    settingsViewModel: SettingsViewModel = viewModel(),
+    moreViewModel: MoreViewModel = viewModel()
+) {
+    val currentTab by appViewModel.currentTab.collectAsStateWithLifecycle()
+    val moreSubScreen by appViewModel.moreSubScreen.collectAsStateWithLifecycle()
+
+    val activityState by activityViewModel.uiState.collectAsStateWithLifecycle()
+    val accounts = activityState.accounts
+    val categories = activityState.categories
+    val subcategories = activityState.subcategories
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -145,15 +169,26 @@ fun PisoApp(viewModel: MainViewModel) {
     // Handle back button press
     BackHandler(enabled = moreSubScreen != null || currentTab != MainTab.HOME) {
         if (moreSubScreen != null) {
-            viewModel.closeMoreSubScreen()
+            appViewModel.closeMoreSubScreen()
         } else if (currentTab != MainTab.HOME) {
-            viewModel.selectTab(MainTab.HOME)
+            appViewModel.selectTab(MainTab.HOME)
         }
     }
 
-    // Collect Snackbar notifications
+    // Collect Snackbar notifications from all ViewModels
     LaunchedEffect(Unit) {
-        viewModel.messageEvent.collectLatest { message ->
+        merge(
+            appViewModel.messageEvent,
+            homeViewModel.messageEvent,
+            activityViewModel.messageEvent,
+            accountsViewModel.messageEvent,
+            goalsViewModel.messageEvent,
+            budgetsViewModel.messageEvent,
+            debtsViewModel.messageEvent,
+            investViewModel.messageEvent,
+            settingsViewModel.messageEvent,
+            moreViewModel.messageEvent
+        ).collectLatest { message ->
             snackbarHostState.showSnackbar(message)
         }
     }
@@ -183,7 +218,7 @@ fun PisoApp(viewModel: MainViewModel) {
                         val selected = currentTab == tabItem.tab
                         NavigationBarItem(
                             selected = selected,
-                            onClick = { viewModel.selectTab(tabItem.tab) },
+                            onClick = { appViewModel.selectTab(tabItem.tab) },
                             icon = {
                                 Icon(
                                     imageVector = if (selected) tabItem.selectedIcon else tabItem.unselectedIcon,
@@ -214,24 +249,25 @@ fun PisoApp(viewModel: MainViewModel) {
             if (moreSubScreen != null) {
                 when (moreSubScreen) {
                     MoreSubScreen.BUDGETS -> BudgetsScreen(
-                        viewModel = viewModel,
-                        onBack = { viewModel.closeMoreSubScreen() }
+                        viewModel = budgetsViewModel,
+                        onBack = { appViewModel.closeMoreSubScreen() }
                     )
                     MoreSubScreen.DEBTS -> DebtsScreen(
-                        viewModel = viewModel,
-                        onBack = { viewModel.closeMoreSubScreen() }
+                        viewModel = debtsViewModel,
+                        onBack = { appViewModel.closeMoreSubScreen() }
                     )
                     MoreSubScreen.INVEST -> InvestScreen(
-                        viewModel = viewModel,
-                        onBack = { viewModel.closeMoreSubScreen() }
+                        viewModel = investViewModel,
+                        onBack = { appViewModel.closeMoreSubScreen() }
                     )
                     MoreSubScreen.SETTINGS -> SettingsScreen(
-                        viewModel = viewModel,
-                        onBack = { viewModel.closeMoreSubScreen() }
+                        viewModel = settingsViewModel,
+                        onBack = { appViewModel.closeMoreSubScreen() },
+                        onOpenCategories = { appViewModel.openMoreSubScreen(MoreSubScreen.CATEGORIES) }
                     )
                     MoreSubScreen.CATEGORIES -> CategoriesScreen(
-                        viewModel = viewModel,
-                        onBack = { viewModel.openMoreSubScreen(MoreSubScreen.SETTINGS) }
+                        viewModel = settingsViewModel,
+                        onBack = { appViewModel.openMoreSubScreen(MoreSubScreen.SETTINGS) }
                     )
                     null -> {}
                 }
@@ -244,15 +280,30 @@ fun PisoApp(viewModel: MainViewModel) {
                 ) { tab ->
                     when (tab) {
                         MainTab.HOME -> HomeScreen(
-                            viewModel = viewModel,
+                            viewModel = homeViewModel,
                             onOpenAddTransaction = { preselectedType ->
                                 quickAddType = preselectedType
+                            },
+                            onNavigateToTab = { targetTab ->
+                                appViewModel.selectTab(targetTab)
+                            },
+                            onNavigateToSubScreen = { subScreen ->
+                                appViewModel.openMoreSubScreen(subScreen)
+                            },
+                            onNavigateToActivityFilter = { monthKey, filter ->
+                                activityViewModel.setSelectedMonthKey(monthKey)
+                                activityViewModel.setActivityFilter(filter)
                             }
                         )
-                        MainTab.ACTIVITY -> ActivityScreen(viewModel = viewModel)
-                        MainTab.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
-                        MainTab.GOALS -> GoalsScreen(viewModel = viewModel)
-                        MainTab.MORE -> MoreScreen(viewModel = viewModel)
+                        MainTab.ACTIVITY -> ActivityScreen(viewModel = activityViewModel)
+                        MainTab.ACCOUNTS -> AccountsScreen(viewModel = accountsViewModel)
+                        MainTab.GOALS -> GoalsScreen(viewModel = goalsViewModel)
+                        MainTab.MORE -> MoreScreen(
+                            viewModel = moreViewModel,
+                            onOpenSubScreen = { subScreen ->
+                                appViewModel.openMoreSubScreen(subScreen)
+                            }
+                        )
                     }
                 }
             }
@@ -267,18 +318,18 @@ fun PisoApp(viewModel: MainViewModel) {
             categories = categories,
             subcategories = subcategories,
             onAddCategory = { name, kind, onComplete ->
-                viewModel.addCategory(name, kind) { success, _ ->
+                activityViewModel.addCategory(name, kind) { success, _ ->
                     if (success) onComplete(name)
                 }
             },
             onAddSubcategory = { parent, name, onComplete ->
-                viewModel.addSubcategory(parent, name) { success, _ ->
+                activityViewModel.addSubcategory(parent, name) { success, _ ->
                     if (success) onComplete(name)
                 }
             },
             onDismiss = { quickAddType = null },
             onSave = { newTx ->
-                viewModel.addTransaction(newTx)
+                activityViewModel.addTransaction(newTx)
                 quickAddType = null
             }
         )

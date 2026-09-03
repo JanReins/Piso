@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CreditCard
@@ -35,12 +34,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.janreins.piso.ui.MainViewModel
-import com.janreins.piso.ui.MoreSubScreen
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoTopBar
+import com.janreins.piso.ui.state.MoreSubScreen
 import com.janreins.piso.ui.theme.ExpenseContainer
 import com.janreins.piso.ui.theme.ExpenseRed
 import com.janreins.piso.ui.theme.IncomeContainer
@@ -51,15 +48,17 @@ import com.janreins.piso.util.CurrencyUtil
 
 @Composable
 fun MoreScreen(
-    viewModel: MainViewModel,
+    viewModel: MoreViewModel,
+    onOpenSubScreen: (MoreSubScreen) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val budgets by viewModel.budgets.collectAsStateWithLifecycle()
-    val debts by viewModel.debts.collectAsStateWithLifecycle()
-    val investments by viewModel.investments.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val totalInvestments = investments.sumOf { it.currentValue }
-    val totalDebtsRemaining = debts.sumOf { it.remainingAmount }
+    val budgets = uiState.budgets
+    val debts = uiState.debts
+    val investments = uiState.investments
+    val totalInvestments = uiState.totalInvestments
+    val totalDebtsRemaining = uiState.totalDebtsRemaining
 
     Scaffold(
         modifier = modifier.testTag("more_screen"),
@@ -91,7 +90,7 @@ fun MoreScreen(
                     icon = Icons.Default.PieChart,
                     iconBg = TealContainer,
                     iconTint = TealPrimary,
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.BUDGETS) },
+                    onClick = { onOpenSubScreen(MoreSubScreen.BUDGETS) },
                     testTag = "more_budgets_button"
                 )
             }
@@ -104,7 +103,7 @@ fun MoreScreen(
                     icon = Icons.Default.CreditCard,
                     iconBg = ExpenseContainer,
                     iconTint = ExpenseRed,
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.DEBTS) },
+                    onClick = { onOpenSubScreen(MoreSubScreen.DEBTS) },
                     testTag = "more_debts_button"
                 )
             }
@@ -117,7 +116,7 @@ fun MoreScreen(
                     icon = Icons.Default.ShowChart,
                     iconBg = IncomeContainer,
                     iconTint = IncomeGreen,
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.INVEST) },
+                    onClick = { onOpenSubScreen(MoreSubScreen.INVEST) },
                     testTag = "more_invest_button"
                 )
             }
@@ -139,7 +138,7 @@ fun MoreScreen(
                     icon = Icons.Default.Settings,
                     iconBg = MaterialTheme.colorScheme.surfaceVariant,
                     iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.SETTINGS) },
+                    onClick = { onOpenSubScreen(MoreSubScreen.SETTINGS) },
                     testTag = "more_settings_button"
                 )
             }

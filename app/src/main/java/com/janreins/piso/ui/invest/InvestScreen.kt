@@ -21,7 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.FloatingActionButton
@@ -43,28 +42,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.models.Investment
-import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoEmptyState
 import com.janreins.piso.ui.components.PisoTopBar
 import com.janreins.piso.ui.theme.IncomeContainer
 import com.janreins.piso.ui.theme.IncomeGreen
-import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
 import com.janreins.piso.util.CurrencyUtil
 import com.janreins.piso.util.DateUtil
 
 @Composable
 fun InvestScreen(
-    viewModel: MainViewModel,
+    viewModel: InvestViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val investments by viewModel.investments.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val investments = uiState.investments
     val totalInvestments = remember(investments) { investments.sumOf { it.currentValue } }
 
     var showAddDialog by remember { mutableStateOf(false) }

@@ -1,6 +1,5 @@
 package com.janreins.piso.ui.budgets
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,39 +33,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.models.Budget
-import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoEmptyState
 import com.janreins.piso.ui.components.PisoTopBar
 import com.janreins.piso.ui.components.ProgressBarWithPercent
-import com.janreins.piso.ui.theme.ExpenseContainer
 import com.janreins.piso.ui.theme.ExpenseRed
-import com.janreins.piso.ui.theme.TealContainer
 import com.janreins.piso.ui.theme.TealPrimary
 import com.janreins.piso.ui.theme.WarningAmber
-import com.janreins.piso.ui.theme.WarningContainer
 import com.janreins.piso.util.CurrencyUtil
 import com.janreins.piso.util.DateUtil
 
 @Composable
 fun BudgetsScreen(
-    viewModel: MainViewModel,
+    viewModel: BudgetsViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val budgets by viewModel.budgets.collectAsStateWithLifecycle()
-    val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val categorySpending by viewModel.currentMonthCategorySpending.collectAsStateWithLifecycle()
-    val breakdownMap by viewModel.currentMonthBreakdownMap.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val budgets = uiState.budgets
+    val categories = uiState.categories
+    val categorySpending = uiState.currentMonthCategorySpending
+    val breakdownMap = uiState.currentMonthBreakdownMap
 
     val currentMonthKey = DateUtil.getCurrentMonthKey()
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)

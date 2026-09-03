@@ -1,7 +1,6 @@
 package com.janreins.piso.ui.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,26 +17,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,16 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.janreins.piso.data.models.Account
-import com.janreins.piso.data.models.Debt
-import com.janreins.piso.data.models.Goal
-import com.janreins.piso.data.models.Transaction
-import com.janreins.piso.ui.MainTab
-import com.janreins.piso.ui.MainViewModel
-import com.janreins.piso.ui.MoreSubScreen
 import com.janreins.piso.ui.components.PisoCard
-import com.janreins.piso.ui.components.PisoEmptyState
 import com.janreins.piso.ui.components.ProgressBarWithPercent
+import com.janreins.piso.ui.state.MainTab
+import com.janreins.piso.ui.state.MoreSubScreen
 import com.janreins.piso.ui.theme.ExpenseContainer
 import com.janreins.piso.ui.theme.ExpenseRed
 import com.janreins.piso.ui.theme.IncomeContainer
@@ -70,20 +56,25 @@ import com.janreins.piso.util.DateUtil
 
 @Composable
 fun HomeScreen(
-    viewModel: MainViewModel,
+    viewModel: HomeViewModel,
     onOpenAddTransaction: (preselectedType: String) -> Unit,
+    onNavigateToTab: (MainTab) -> Unit,
+    onNavigateToSubScreen: (MoreSubScreen) -> Unit,
+    onNavigateToActivityFilter: (monthKey: String, filter: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val netWorth by viewModel.netWorthSummary.collectAsStateWithLifecycle()
-    val monthSummary by viewModel.currentMonthSummary.collectAsStateWithLifecycle()
-    val spendingBreakdown by viewModel.currentMonthSpendingBreakdown.collectAsStateWithLifecycle()
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val budgets by viewModel.budgets.collectAsStateWithLifecycle()
-    val activeGoals by viewModel.activeGoals.collectAsStateWithLifecycle()
-    val openDebts by viewModel.openDebts.collectAsStateWithLifecycle()
-    val recentTransactions by viewModel.recentTransactions.collectAsStateWithLifecycle()
-    val categorySpending by viewModel.currentMonthCategorySpending.collectAsStateWithLifecycle()
-    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val netWorth = uiState.netWorthSummary
+    val monthSummary = uiState.currentMonthSummary
+    val spendingBreakdown = uiState.currentMonthSpendingBreakdown
+    val accounts = uiState.accounts
+    val budgets = uiState.budgets
+    val activeGoals = uiState.activeGoals
+    val openDebts = uiState.openDebts
+    val recentTransactions = uiState.recentTransactions
+    val categorySpending = uiState.currentMonthCategorySpending
+    val userProfile = uiState.userProfile
 
     val currentMonthKey = DateUtil.getCurrentMonthKey()
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)
@@ -118,7 +109,7 @@ fun HomeScreen(
                     )
                 }
                 IconButton(
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.SETTINGS) },
+                    onClick = { onNavigateToSubScreen(MoreSubScreen.SETTINGS) },
                     modifier = Modifier.testTag("home_settings_button")
                 ) {
                     Icon(
@@ -241,9 +232,8 @@ fun HomeScreen(
         item {
             PisoCard(
                 onClick = {
-                    viewModel.setActivityFilter("EXPENSE")
-                    viewModel.setSelectedMonthKey(currentMonthKey)
-                    viewModel.selectTab(MainTab.ACTIVITY)
+                    onNavigateToActivityFilter(currentMonthKey, "EXPENSE")
+                    onNavigateToTab(MainTab.ACTIVITY)
                 },
                 contentPadding = 18.dp
             ) {
@@ -409,7 +399,7 @@ fun HomeScreen(
         // --- Accounts Preview ---
         item {
             PisoCard(
-                onClick = { viewModel.selectTab(MainTab.ACCOUNTS) },
+                onClick = { onNavigateToTab(MainTab.ACCOUNTS) },
                 contentPadding = 16.dp
             ) {
                 Row(
@@ -476,7 +466,7 @@ fun HomeScreen(
         if (currentBudgets.isNotEmpty()) {
             item {
                 PisoCard(
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.BUDGETS) },
+                    onClick = { onNavigateToSubScreen(MoreSubScreen.BUDGETS) },
                     contentPadding = 16.dp
                 ) {
                     Row(
@@ -536,7 +526,7 @@ fun HomeScreen(
         if (activeGoals.isNotEmpty()) {
             item {
                 PisoCard(
-                    onClick = { viewModel.selectTab(MainTab.GOALS) },
+                    onClick = { onNavigateToTab(MainTab.GOALS) },
                     contentPadding = 16.dp
                 ) {
                     Row(
@@ -593,7 +583,7 @@ fun HomeScreen(
         if (openDebts.isNotEmpty()) {
             item {
                 PisoCard(
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.DEBTS) },
+                    onClick = { onNavigateToSubScreen(MoreSubScreen.DEBTS) },
                     contentPadding = 16.dp
                 ) {
                     Row(
@@ -661,7 +651,7 @@ fun HomeScreen(
         // --- Latest 6 Activity Rows ---
         item {
             PisoCard(
-                onClick = { viewModel.selectTab(MainTab.ACTIVITY) },
+                onClick = { onNavigateToTab(MainTab.ACTIVITY) },
                 contentPadding = 16.dp
             ) {
                 Row(
