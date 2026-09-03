@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
-    private val profileManager = UserProfileManager(application.applicationContext)
+    private val profileManager = UserProfileManager.getInstance(application)
 
     init {
         val db = AppDatabase.getDatabase(application)
@@ -35,12 +35,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val userProfile: StateFlow<UserProfile> = profileManager.userProfile
     val isAppLocked: StateFlow<Boolean> = profileManager.isLocked
 
-    private var _skipLockOnce = false
     val skipLockOnce: Boolean
-        get() = _skipLockOnce
+        get() = profileManager.skipLockOnce
 
     fun setSkipLockOnce(value: Boolean = true) {
-        _skipLockOnce = value
+        profileManager.setSkipLockOnce(value)
     }
 
     fun createProfile(name: String, pin: String?) {
@@ -66,7 +65,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun lockApp() {
-        _skipLockOnce = false
+        profileManager.setSkipLockOnce(false)
         if (profileManager.hasPin()) {
             profileManager.lock()
             showMessage("Piso locked")
@@ -76,8 +75,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onAppBackgrounded() {
-        if (_skipLockOnce) {
-            _skipLockOnce = false
+        if (profileManager.consumeSkipLockOnce()) {
             return
         }
         if (profileManager.hasPin()) {

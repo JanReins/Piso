@@ -60,7 +60,7 @@ private data class HomePart2(
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
-    private val profileManager = UserProfileManager(application.applicationContext)
+    private val profileManager = UserProfileManager.getInstance(application)
 
     private val _messageEvent = MutableSharedFlow<String>()
     val messageEvent: SharedFlow<String> = _messageEvent.asSharedFlow()

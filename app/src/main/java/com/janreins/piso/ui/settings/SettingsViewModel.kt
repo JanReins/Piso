@@ -30,7 +30,7 @@ data class SettingsUiState(
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
-    private val profileManager = UserProfileManager(application.applicationContext)
+    private val profileManager = UserProfileManager.getInstance(application)
 
     private val _messageEvent = MutableSharedFlow<String>()
     val messageEvent: SharedFlow<String> = _messageEvent.asSharedFlow()
@@ -97,6 +97,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun lockApp() {
+        profileManager.setSkipLockOnce(false)
         if (profileManager.hasPin()) {
             profileManager.lock()
             showMessage("Piso locked")
@@ -106,7 +107,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setSkipLockOnce(value: Boolean = true) {
-        // Handled via profileManager or app context if needed
+        profileManager.setSkipLockOnce(value)
     }
 
     // --- Backup & Restore & Clear ---

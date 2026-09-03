@@ -35,6 +35,22 @@ class UserProfileManager(context: Context) {
     private val _isLocked = MutableStateFlow(hasPin())
     val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
 
+    private var _skipLockOnce = false
+    val skipLockOnce: Boolean
+        get() = _skipLockOnce
+
+    fun setSkipLockOnce(value: Boolean = true) {
+        _skipLockOnce = value
+    }
+
+    fun consumeSkipLockOnce(): Boolean {
+        if (_skipLockOnce) {
+            _skipLockOnce = false
+            return true
+        }
+        return false
+    }
+
     private fun loadProfile(): UserProfile {
         val name = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
         val hash = prefs.getString(KEY_PIN_HASH, "") ?: ""
@@ -152,6 +168,7 @@ class UserProfileManager(context: Context) {
     }
 
     fun lock() {
+        _skipLockOnce = false
         if (hasPin()) {
             _isLocked.value = true
         }
@@ -198,5 +215,16 @@ class UserProfileManager(context: Context) {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+
+        @Volatile
+        private var INSTANCE: UserProfileManager? = null
+
+        fun getInstance(context: Context): UserProfileManager {
+            return INSTANCE ?: synchronized(this) {
+                val instance = UserProfileManager(context.applicationContext)
+                INSTANCE = instance
+                instance
+            }
+        }
     }
 }
