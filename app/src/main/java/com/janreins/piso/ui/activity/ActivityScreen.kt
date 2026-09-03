@@ -1,7 +1,6 @@
 package com.janreins.piso.ui.activity
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,10 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -49,11 +45,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.Transaction
-import com.janreins.piso.ui.MainViewModel
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PisoCard
 import com.janreins.piso.ui.components.PisoEmptyState
@@ -69,15 +62,17 @@ import com.janreins.piso.util.DateUtil
 
 @Composable
 fun ActivityScreen(
-    viewModel: MainViewModel,
+    viewModel: ActivityViewModel,
     modifier: Modifier = Modifier
 ) {
-    val transactions by viewModel.transactions.collectAsStateWithLifecycle()
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val subcategories by viewModel.subcategories.collectAsStateWithLifecycle()
-    val selectedMonthKey by viewModel.selectedMonthKey.collectAsStateWithLifecycle()
-    val activityFilter by viewModel.activityFilter.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val transactions = uiState.transactions
+    val accounts = uiState.accounts
+    val categories = uiState.categories
+    val subcategories = uiState.subcategories
+    val selectedMonthKey = uiState.selectedMonthKey
+    val activityFilter = uiState.activityFilter
 
     var showAddDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }

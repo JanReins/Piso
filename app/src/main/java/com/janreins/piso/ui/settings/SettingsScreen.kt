@@ -73,8 +73,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.janreins.piso.data.local.ThemeMode
 import com.janreins.piso.data.local.isWeakPin
 import com.janreins.piso.data.models.BackupData
-import com.janreins.piso.ui.MainViewModel
-import com.janreins.piso.ui.MoreSubScreen
 import com.janreins.piso.ui.components.ConfirmDialog
 import com.janreins.piso.ui.components.PinDots
 import com.janreins.piso.ui.components.PinKeypad
@@ -91,12 +89,14 @@ import java.util.Locale
 
 @Composable
 fun SettingsScreen(
-    viewModel: MainViewModel,
+    viewModel: SettingsViewModel,
     onBack: () -> Unit,
+    onOpenCategories: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val userProfile = uiState.userProfile
 
     // Dialog States
     var showEditNameDialog by remember { mutableStateOf(false) }
@@ -442,7 +442,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 PisoCard(
-                    onClick = { viewModel.openMoreSubScreen(MoreSubScreen.CATEGORIES) },
+                    onClick = onOpenCategories,
                     contentPadding = 16.dp,
                     modifier = Modifier.testTag("settings_categories_button")
                 ) {
