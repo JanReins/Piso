@@ -17,7 +17,7 @@
 ## Security & Privacy
 
 - **100% Local Storage**: All financial records, accounts, and profile data are stored strictly on-device using SQLite via Room Database (`piso_database`).
-- **PIN Lock Security**: Secure app launch with a 4-digit PIN code. Supports customizable lock behaviors including instant lock on pause or temporary skip-lock options.
+- **PIN Lock Security**: Secure app launch with a 6-digit PIN code. Supports customizable lock behaviors including instant lock on pause or temporary skip-lock options.
 - **No Cloud Dependency**: Runs completely offline with no mandatory external server connections or cloud tracking.
 
 ---
