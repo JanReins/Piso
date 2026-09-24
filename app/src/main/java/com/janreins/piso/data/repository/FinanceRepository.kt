@@ -81,11 +81,25 @@ class FinanceRepository(private val database: AppDatabase) {
     suspend fun updateCategoryName(category: UserCategory, newName: String) {
         val trimmedNewName = newName.trim()
         if (trimmedNewName.isEmpty() || trimmedNewName == category.name) return
+        val kind = category.kind.uppercase()
         database.withTransaction {
+            // A category name can exist for both kinds (e.g. "Other"), so only touch
+            // transactions and budgets of this category's own kind.
+            val nameSharedWithOtherKind = categoryDao.getAllCategories().first()
+                .any { it.id != category.id && it.name == category.name }
             categoryDao.updateCategory(category.copy(name = trimmedNewName))
-            categoryDao.updateSubcategoriesParentName(category.name, trimmedNewName)
-            categoryDao.updateTransactionsCategoryName(category.name, trimmedNewName)
-            categoryDao.updateBudgetsCategoryName(category.name, trimmedNewName)
+            if (nameSharedWithOtherKind) {
+                // Subcategories are keyed by parent name only; copy them so the other kind keeps its own
+                val subs = categoryDao.getAllSubcategories().first()
+                    .filter { it.parentCategoryName == category.name }
+                categoryDao.insertSubcategories(subs.map { it.copy(id = 0, parentCategoryName = trimmedNewName) })
+            } else {
+                categoryDao.updateSubcategoriesParentName(category.name, trimmedNewName)
+            }
+            categoryDao.updateTransactionsCategoryNameForType(category.name, trimmedNewName, kind)
+            if (kind == "EXPENSE") {
+                categoryDao.updateBudgetsCategoryName(category.name, trimmedNewName)
+            }
         }
     }
 
@@ -95,7 +109,7 @@ class FinanceRepository(private val database: AppDatabase) {
 
     suspend fun deleteCategory(category: UserCategory) {
         database.withTransaction {
-            val count = categoryDao.countTransactionsForCategory(category.name)
+            val count = categoryDao.countTransactionsForCategoryAndType(category.name, category.kind.uppercase())
             if (count > 0) {
                 // If transactions use this category, archive it to keep historical data intact
                 categoryDao.updateCategory(category.copy(isArchived = true))
@@ -199,6 +213,21 @@ class FinanceRepository(private val database: AppDatabase) {
                         accountDao.updateAccount(acc.copy(balance = acc.balance - tx.amount))
                     }
                 }
+                // Mirror revertTransactionBalance so editing a debt payment or goal
+                // contribution re-applies it instead of only undoing it.
+                tx.debtId?.let { debtId ->
+                    val debt = debtDao.getDebtById(debtId)
+                    if (debt != null) {
+                        debtDao.updateDebt(debt.copy(remainingAmount = max(0.0, debt.remainingAmount - tx.amount)))
+                    }
+                }
+                if (tx.goalFlow == "IN" && tx.goalId != null) {
+                    val goal = goalDao.getGoalById(tx.goalId)
+                    if (goal != null) {
+                        val newAmount = goal.currentAmount + tx.amount
+                        goalDao.updateGoal(goal.copy(currentAmount = newAmount, isCompleted = newAmount >= goal.targetAmount))
+                    }
+                }
             }
             "TRANSFER" -> {
                 tx.accountId?.let { fromId ->
@@ -238,7 +267,11 @@ class FinanceRepository(private val database: AppDatabase) {
                 tx.debtId?.let { debtId ->
                     val debt = debtDao.getDebtById(debtId)
                     if (debt != null) {
-                        debtDao.updateDebt(debt.copy(remainingAmount = debt.remainingAmount + tx.amount))
+                        // Payments were clamped at 0 remaining, so an overpayment only reduced the
+                        // debt by what was owed. Don't restore more than the original amount.
+                        val cap = max(debt.originalAmount, debt.remainingAmount)
+                        val restored = minOf(debt.remainingAmount + tx.amount, cap)
+                        debtDao.updateDebt(debt.copy(remainingAmount = restored))
                     }
                 }
                 // If it was linked to a goal contribution, adjust goal current amount

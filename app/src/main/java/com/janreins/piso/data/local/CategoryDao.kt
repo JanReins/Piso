@@ -64,6 +64,9 @@ interface CategoryDao {
     @Query("UPDATE transactions SET category = :newName WHERE category = :oldName")
     suspend fun updateTransactionsCategoryName(oldName: String, newName: String)
 
+    @Query("UPDATE transactions SET category = :newName WHERE category = :oldName AND type = :type")
+    suspend fun updateTransactionsCategoryNameForType(oldName: String, newName: String, type: String)
+
     @Query("UPDATE transactions SET subcategory = :newSubName WHERE category = :parentName AND subcategory = :oldSubName")
     suspend fun updateTransactionsSubcategoryName(parentName: String, oldSubName: String, newSubName: String)
 
@@ -73,6 +76,9 @@ interface CategoryDao {
     // --- Transaction Count Checks ---
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName")
     suspend fun countTransactionsForCategory(categoryName: String): Int
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName AND type = :type")
+    suspend fun countTransactionsForCategoryAndType(categoryName: String, type: String): Int
 
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :parentName AND subcategory = :subcategoryName")
     suspend fun countTransactionsForSubcategory(parentName: String, subcategoryName: String): Int
