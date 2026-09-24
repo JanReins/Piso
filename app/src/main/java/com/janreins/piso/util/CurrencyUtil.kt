@@ -20,11 +20,10 @@ object CurrencyUtil {
      * Formats a number as Philippine Peso, e.g. ₱12,500.00 or -₱500.00
      */
     fun formatPeso(amount: Double): String {
-        return if (amount < 0) {
-            "-₱" + pesoFormatter.format(kotlin.math.abs(amount))
-        } else {
-            "₱" + pesoFormatter.format(amount)
-        }
+        // Round to centavos first so floating-point residue (e.g. -0.000001) doesn't render as "-₱0.00"
+        val cents = Math.round(amount * 100)
+        val formatted = pesoFormatter.format(kotlin.math.abs(cents) / 100.0)
+        return if (cents < 0) "-₱$formatted" else "₱$formatted"
     }
 
     /**
@@ -32,9 +31,18 @@ object CurrencyUtil {
      * Returns null if invalid or <= 0.
      */
     fun parsePositiveAmount(text: String): Double? {
+        val value = parseAmount(text) ?: return null
+        return if (value > 0) value else null
+    }
+
+    /**
+     * Parses a string input into a finite Double amount (may be zero or negative).
+     * Returns null for blank, malformed, NaN, or infinite input.
+     */
+    fun parseAmount(text: String): Double? {
         val clean = text.trim().replace(",", "").replace("₱", "")
         val value = clean.toDoubleOrNull() ?: return null
-        return if (value > 0) value else null
+        return if (value.isFinite()) value else null
     }
 
     /**

@@ -163,7 +163,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             onResult(false, "Category name cannot be empty")
             return
         }
-        if (trimmed.equals(category.name, ignoreCase = true)) {
+        if (trimmed == category.name) {
             onResult(true, null)
             return
         }
@@ -220,7 +220,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             onResult(false, "Subcategory name cannot be empty")
             return
         }
-        if (trimmed.equals(subcategory.name, ignoreCase = true)) {
+        if (trimmed == subcategory.name) {
             onResult(true, null)
             return
         }

@@ -181,8 +181,11 @@ fun GoalDialog(
                         errorMessage = "Please enter a target amount greater than 0."
                         return@Button
                     }
-                    val cleanCurrent = currentText.trim().replace(",", "").replace("₱", "")
-                    val parsedCurrent = cleanCurrent.toDoubleOrNull() ?: 0.0
+                    val parsedCurrent = if (currentText.isBlank()) 0.0 else CurrencyUtil.parseAmount(currentText)
+                    if (parsedCurrent == null || parsedCurrent < 0) {
+                        errorMessage = "Please enter a valid saved amount (0 or more)."
+                        return@Button
+                    }
 
                     val goal = Goal(
                         id = initialGoal?.id ?: 0L,

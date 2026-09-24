@@ -221,9 +221,7 @@ class UserProfileManager(context: Context) {
 
         fun getInstance(context: Context): UserProfileManager {
             return INSTANCE ?: synchronized(this) {
-                val instance = UserProfileManager(context.applicationContext)
-                INSTANCE = instance
-                instance
+                INSTANCE ?: UserProfileManager(context.applicationContext).also { INSTANCE = it }
             }
         }
     }
