@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -90,36 +92,56 @@ class MainActivity : ComponentActivity() {
             val userProfile by appViewModel.userProfile.collectAsStateWithLifecycle()
             val isAppLocked by appViewModel.isAppLocked.collectAsStateWithLifecycle()
 
+            // Hoisted above the screen switch so app-level messages sent while the Welcome or
+            // Lock screen is showing (e.g. "Welcome to Piso", reset confirmation) aren't dropped.
+            val snackbarHostState = remember { SnackbarHostState() }
+            LaunchedEffect(Unit) {
+                appViewModel.messageEvent.collectLatest { message ->
+                    snackbarHostState.showSnackbar(message)
+                }
+            }
+            val showMainApp = userProfile.displayName.isNotBlank() && !(userProfile.hasPin && isAppLocked)
+
             PisoTheme(themeMode = userProfile.themeMode) {
-                when {
-                    // 1. First Launch Welcome (No profile created yet)
-                    userProfile.displayName.isBlank() -> {
-                        WelcomeScreen(
-                            onStartUsingPiso = { name, pin ->
-                                appViewModel.createProfile(name, pin)
-                            }
-                        )
-                    }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        // 1. First Launch Welcome (No profile created yet)
+                        userProfile.displayName.isBlank() -> {
+                            WelcomeScreen(
+                                onStartUsingPiso = { name, pin ->
+                                    appViewModel.createProfile(name, pin)
+                                }
+                            )
+                        }
 
-                    // 2. Lock Screen (Profile exists, PIN enabled, app is locked)
-                    userProfile.hasPin && isAppLocked -> {
-                        LockScreen(
-                            displayName = userProfile.displayName,
-                            onUnlock = { pin ->
-                                appViewModel.unlockApp(pin)
-                            },
-                            onResetAllData = {
-                                appViewModel.clearAllDataAndReset()
-                            },
-                            getLockoutRemainingSeconds = {
-                                appViewModel.getLockoutRemainingSeconds()
-                            }
-                        )
-                    }
+                        // 2. Lock Screen (Profile exists, PIN enabled, app is locked)
+                        userProfile.hasPin && isAppLocked -> {
+                            LockScreen(
+                                displayName = userProfile.displayName,
+                                onUnlock = { pin ->
+                                    appViewModel.unlockApp(pin)
+                                },
+                                onResetAllData = {
+                                    appViewModel.clearAllDataAndReset()
+                                },
+                                getLockoutRemainingSeconds = {
+                                    appViewModel.getLockoutRemainingSeconds()
+                                }
+                            )
+                        }
 
-                    // 3. Main Piso Application (Unlocked)
-                    else -> {
-                        PisoApp(appViewModel = appViewModel)
+                        // 3. Main Piso Application (Unlocked)
+                        else -> {
+                            PisoApp(appViewModel = appViewModel, snackbarHostState = snackbarHostState)
+                        }
+                    }
+                    if (!showMainApp) {
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                        )
                     }
                 }
             }
@@ -143,6 +165,7 @@ data class NavigationTabItem(
 @Composable
 fun PisoApp(
     appViewModel: AppViewModel = viewModel(),
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     homeViewModel: HomeViewModel = viewModel(),
     activityViewModel: ActivityViewModel = viewModel(),
     accountsViewModel: AccountsViewModel = viewModel(),
@@ -161,8 +184,6 @@ fun PisoApp(
     val categories = activityState.categories
     val subcategories = activityState.subcategories
 
-    val snackbarHostState = remember { SnackbarHostState() }
-
     // Quick Add Transaction Modal from Home
     var quickAddType by remember { mutableStateOf<String?>(null) }
 
@@ -175,10 +196,9 @@ fun PisoApp(
         }
     }
 
-    // Collect Snackbar notifications from all ViewModels
+    // Collect Snackbar notifications from the screen ViewModels (AppViewModel's are collected in MainActivity)
     LaunchedEffect(Unit) {
         merge(
-            appViewModel.messageEvent,
             homeViewModel.messageEvent,
             activityViewModel.messageEvent,
             accountsViewModel.messageEvent,

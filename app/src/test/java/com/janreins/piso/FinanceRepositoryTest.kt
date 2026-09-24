@@ -8,6 +8,7 @@ import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.Debt
 import com.janreins.piso.data.models.Goal
 import com.janreins.piso.data.models.Transaction
+import com.janreins.piso.data.models.UserCategory
 import com.janreins.piso.data.repository.FinanceRepository
 import com.janreins.piso.util.CurrencyUtil
 import kotlinx.coroutines.flow.first
@@ -169,5 +170,64 @@ class FinanceRepositoryTest {
         val success = repository.importBackupJson(json)
         assertTrue(success)
         assertEquals(1, repository.allAccounts.first().size)
+    }
+
+    @Test
+    fun testEditingDebtPaymentKeepsDebtBalance() = runBlocking {
+        val accountId = repository.insertAccount(Account(name = "Checking", kind = "Bank", balance = 5000.0))
+        val debtId = repository.insertDebt(
+            Debt(name = "Loan", kind = "Personal", originalAmount = 3000.0, remainingAmount = 3000.0)
+        )
+        repository.recordDebtPayment(debtId, 1000.0, accountId)
+        val paymentTx = repository.allTransactions.first().single()
+
+        repository.updateTransaction(paymentTx, paymentTx.copy(amount = 1500.0, note = "Edited"))
+
+        assertEquals(1500.0, database.debtDao().getDebtById(debtId)!!.remainingAmount, 0.001)
+        assertEquals(3500.0, database.accountDao().getAccountById(accountId)!!.balance, 0.001)
+    }
+
+    @Test
+    fun testEditingGoalContributionKeepsGoalBalance() = runBlocking {
+        val accountId = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 5000.0))
+        val goalId = repository.insertGoal(Goal(name = "Laptop", targetAmount = 1000.0))
+        repository.addMoneyToGoal(goalId, 400.0, accountId)
+        val goalTx = repository.allTransactions.first().single()
+
+        repository.updateTransaction(goalTx, goalTx.copy(amount = 1000.0))
+
+        val goal = database.goalDao().getGoalById(goalId)!!
+        assertEquals(1000.0, goal.currentAmount, 0.001)
+        assertTrue(goal.isCompleted)
+        assertEquals(4000.0, database.accountDao().getAccountById(accountId)!!.balance, 0.001)
+    }
+
+    @Test
+    fun testDeletingOverpaymentRestoresOnlyOriginalAmount() = runBlocking {
+        val debtId = repository.insertDebt(
+            Debt(name = "IOU", kind = "Family", originalAmount = 800.0, remainingAmount = 800.0)
+        )
+        repository.recordDebtPayment(debtId, 1000.0, null)
+        assertEquals(0.0, database.debtDao().getDebtById(debtId)!!.remainingAmount, 0.001)
+
+        repository.deleteTransaction(repository.allTransactions.first().single())
+
+        assertEquals(800.0, database.debtDao().getDebtById(debtId)!!.remainingAmount, 0.001)
+    }
+
+    @Test
+    fun testRenamingCategoryOnlyAffectsItsOwnKind() = runBlocking {
+        val expenseOther = UserCategory(name = "Other", kind = "EXPENSE")
+        val incomeOther = UserCategory(name = "Other", kind = "INCOME")
+        val expenseId = repository.insertCategory(expenseOther)
+        repository.insertCategory(incomeOther)
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Other", amount = 10.0))
+        repository.addTransaction(Transaction(type = "INCOME", category = "Other", amount = 20.0))
+
+        repository.updateCategoryName(expenseOther.copy(id = expenseId), "Misc")
+
+        val txs = repository.allTransactions.first()
+        assertEquals("Misc", txs.single { it.type == "EXPENSE" }.category)
+        assertEquals("Other", txs.single { it.type == "INCOME" }.category)
     }
 }

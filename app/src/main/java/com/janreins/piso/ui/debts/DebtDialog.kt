@@ -188,8 +188,15 @@ fun DebtDialog(
                         errorMessage = "Please enter a valid original amount greater than 0."
                         return@Button
                     }
-                    val cleanRemaining = remainingText.trim().replace(",", "").replace("₱", "")
-                    val parsedRemaining = cleanRemaining.toDoubleOrNull() ?: parsedOriginal
+                    val parsedRemaining = if (remainingText.isBlank()) {
+                        parsedOriginal
+                    } else {
+                        CurrencyUtil.parseAmount(remainingText)
+                    }
+                    if (parsedRemaining == null || parsedRemaining < 0) {
+                        errorMessage = "Please enter a valid remaining amount (0 or more)."
+                        return@Button
+                    }
 
                     val debt = Debt(
                         id = initialDebt?.id ?: 0L,
@@ -197,7 +204,8 @@ fun DebtDialog(
                         kind = kind,
                         originalAmount = parsedOriginal,
                         remainingAmount = parsedRemaining,
-                        notes = notes.trim()
+                        notes = notes.trim(),
+                        dueMillis = initialDebt?.dueMillis
                     )
                     onSave(debt)
                 },

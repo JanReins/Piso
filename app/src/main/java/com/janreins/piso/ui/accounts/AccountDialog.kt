@@ -191,10 +191,13 @@ fun AccountDialog(
                         return@Button
                     }
                     val finalBalance = if (initialAccount == null) {
-                        val cleanBalance = balanceText.trim().replace(",", "").replace("₱", "")
-                        cleanBalance.toDoubleOrNull() ?: 0.0
+                        if (balanceText.isBlank()) 0.0 else CurrencyUtil.parseAmount(balanceText)
                     } else {
                         initialAccount.balance
+                    }
+                    if (finalBalance == null) {
+                        errorMessage = "Please enter a valid starting balance."
+                        return@Button
                     }
 
                     val account = Account(

@@ -131,9 +131,19 @@ data class BackupData(
     }
 
     companion object {
+        private val BACKUP_ARRAY_KEYS = listOf(
+            "accounts", "transactions", "budgets", "goals", "debts", "investments", "categories", "subcategories"
+        )
+
         fun fromJsonString(jsonStr: String): BackupData? {
             return try {
                 val root = JSONObject(jsonStr)
+
+                // Reject JSON that isn't a Piso backup; otherwise an unrelated file (or "{}")
+                // would parse as an empty backup and a restore would wipe all data.
+                val isPisoBackup = root.optString("appName") == "Piso" ||
+                    BACKUP_ARRAY_KEYS.any { root.optJSONArray(it) != null }
+                if (!isPisoBackup) return null
 
                 val accounts = mutableListOf<Account>()
                 val accArr = root.optJSONArray("accounts") ?: JSONArray()

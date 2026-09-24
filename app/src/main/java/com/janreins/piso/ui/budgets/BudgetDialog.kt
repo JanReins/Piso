@@ -154,6 +154,11 @@ fun BudgetDialog(
                         errorMessage = "Please enter a budget limit greater than 0."
                         return@Button
                     }
+                    // Every category may already have a budget this month; don't create a duplicate
+                    if (category != initialBudget?.category && existingCategories.contains(category)) {
+                        errorMessage = "$category already has a budget this month."
+                        return@Button
+                    }
 
                     val budget = Budget(
                         id = initialBudget?.id ?: 0L,
