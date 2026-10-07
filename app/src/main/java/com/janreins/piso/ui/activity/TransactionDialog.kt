@@ -15,8 +15,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -27,9 +30,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -75,22 +80,24 @@ fun TransactionDialog(
         mutableStateOf(if (initialTransaction != null) CurrencyUtil.formatInputAmount(initialTransaction.amount) else "")
     }
 
+    // Archived categories stay hidden from the picker, except the one an edited transaction already uses.
     val availableCategories = remember(categories, type) {
-        val matching = categories.filter { it.kind.equals(type, ignoreCase = true) }
-        if (matching.isNotEmpty()) {
-            matching.map { it.name }
-        } else {
-            if (type == "INCOME") Categories.INCOME else Categories.EXPENSE
-        }
+        val matching = categories
+            .filter { it.kind.equals(type, ignoreCase = true) }
+            .filter { !it.isArchived || (it.name == initialTransaction?.category && type == initialTransaction?.type) }
+            .map { it.name }
+        matching.ifEmpty { if (type == "INCOME") Categories.INCOME else Categories.EXPENSE }
     }
 
-    var category by remember(type, availableCategories) {
-        val defaultCat = initialTransaction?.category
-            ?.takeIf { type == initialTransaction.type && it.isNotBlank() }
-            ?: availableCategories.firstOrNull()
-            ?: (if (type == "INCOME") "Salary" else "Food")
-        mutableStateOf(defaultCat)
-    }
+    fun defaultCategoryFor(txType: String): String =
+        initialTransaction?.category
+            ?.takeIf { txType == initialTransaction.type && it.isNotBlank() }
+            ?: categories.firstOrNull { it.kind.equals(txType, ignoreCase = true) && !it.isArchived }?.name
+            ?: (if (txType == "INCOME") Categories.INCOME.first() else Categories.EXPENSE.first())
+
+    // Not keyed on the category list: a quick-added category makes the list re-emit, which
+    // previously reset the selection back to the default.
+    var category by remember { mutableStateOf(defaultCategoryFor(type)) }
 
     val availableSubcategories = remember(subcategories, category) {
         subcategories.filter {
@@ -127,6 +134,8 @@ fun TransactionDialog(
     var showQuickAddCategoryDialog by remember { mutableStateOf(false) }
     var showQuickAddSubcategoryDialog by remember { mutableStateOf(false) }
 
+    var showDatePicker by remember { mutableStateOf(false) }
+
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -154,8 +163,11 @@ fun TransactionDialog(
                         FilterChip(
                             selected = isSelected,
                             onClick = {
-                                type = typeKey
-                                subcategory = ""
+                                if (type != typeKey) {
+                                    type = typeKey
+                                    category = defaultCategoryFor(typeKey)
+                                    subcategory = ""
+                                }
                             },
                             label = { Text(label) },
                             colors = FilterChipDefaults.filterChipColors(
@@ -418,12 +430,21 @@ fun TransactionDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Date display
-                Text(
-                    text = "Date: ${DateUtil.formatDate(dateMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Date picker (back-dating is common when catching up on receipts)
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("transaction_date_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("Date: ${DateUtil.formatDate(dateMillis)}")
+                }
 
                 if (errorMessage != null) {
                     Text(
@@ -446,9 +467,15 @@ fun TransactionDialog(
                         errorMessage = "Please select an account."
                         return@Button
                     }
-                    if (type == "TRANSFER" && selectedAccountId == transferToAccountId) {
-                        errorMessage = "Transfer source and destination accounts must be different."
-                        return@Button
+                    if (type == "TRANSFER") {
+                        if (accounts.size < 2) {
+                            errorMessage = "Add at least two accounts to record a transfer."
+                            return@Button
+                        }
+                        if (transferToAccountId == null || selectedAccountId == transferToAccountId) {
+                            errorMessage = "Transfer source and destination accounts must be different."
+                            return@Button
+                        }
                     }
 
                     val tx = Transaction(
@@ -491,7 +518,12 @@ fun TransactionDialog(
             confirmText = "Add",
             onDismiss = { showQuickAddCategoryDialog = false },
             onConfirm = { newName ->
-                if (onAddCategory != null) {
+                val existing = availableCategories.firstOrNull { it.equals(newName.trim(), ignoreCase = true) }
+                if (existing != null) {
+                    category = existing
+                    subcategory = ""
+                    showQuickAddCategoryDialog = false
+                } else if (onAddCategory != null) {
                     onAddCategory(newName, type) { createdName ->
                         category = createdName
                         subcategory = ""
@@ -515,7 +547,11 @@ fun TransactionDialog(
             placeholder = "e.g. Groceries, Dining out",
             onDismiss = { showQuickAddSubcategoryDialog = false },
             onConfirm = { newSubName ->
-                if (onAddSubcategory != null) {
+                val existing = availableSubcategories.firstOrNull { it.equals(newSubName.trim(), ignoreCase = true) }
+                if (existing != null) {
+                    subcategory = existing
+                    showQuickAddSubcategoryDialog = false
+                } else if (onAddSubcategory != null) {
                     onAddSubcategory(category, newSubName) { createdSubName ->
                         subcategory = createdSubName
                         showQuickAddSubcategoryDialog = false
@@ -526,5 +562,34 @@ fun TransactionDialog(
                 }
             }
         )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = DateUtil.toPickerUtcMillis(dateMillis)
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { picked ->
+                            dateMillis = DateUtil.fromPickerUtcMillis(picked, keepTimeOf = dateMillis)
+                        }
+                        showDatePicker = false
+                    },
+                    modifier = Modifier.testTag("transaction_date_confirm")
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }

@@ -1,54 +1,67 @@
 package com.janreins.piso.util
 
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
  * Utility functions for date formatting, month keys, and time calculations.
+ *
+ * Uses java.time formatters, which (unlike SimpleDateFormat) are immutable and safe to share
+ * across the coroutine threads that build UI state.
  */
 object DateUtil {
 
-    private val monthYearFormat = SimpleDateFormat("MMMM yyyy", Locale.US)
-    private val monthKeyFormat = SimpleDateFormat("yyyy-MM", Locale.US)
-    private val fullDateFormat = SimpleDateFormat("MMM d, yyyy", Locale.US)
-    private val shortDateFormat = SimpleDateFormat("MMM d", Locale.US)
-    private val inputDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val monthYearFormat = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)
+    private val monthKeyFormat = DateTimeFormatter.ofPattern("yyyy-MM", Locale.US)
+    private val fullDateFormat = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
+    private val shortDateFormat = DateTimeFormatter.ofPattern("MMM d", Locale.US)
+    private val inputDateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+
+    private fun zone(): ZoneId = ZoneId.systemDefault()
+
+    private fun toLocalDateTime(millis: Long): LocalDateTime =
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), zone())
 
     /**
      * Formats timestamp into readable date (e.g. "Sep 1, 2026")
      */
     fun formatDate(millis: Long): String {
-        return fullDateFormat.format(Date(millis))
+        return fullDateFormat.format(toLocalDateTime(millis))
     }
 
     /**
      * Formats timestamp into short date (e.g. "Sep 1")
      */
     fun formatDateShort(millis: Long): String {
-        return shortDateFormat.format(Date(millis))
+        return shortDateFormat.format(toLocalDateTime(millis))
     }
 
     /**
      * Formats timestamp into "yyyy-MM-dd" for date pickers/inputs
      */
     fun formatInputDate(millis: Long): String {
-        return inputDateFormat.format(Date(millis))
+        return inputDateFormat.format(toLocalDateTime(millis))
     }
 
     /**
      * Returns the current month key, e.g. "2026-09"
      */
     fun getCurrentMonthKey(): String {
-        return monthKeyFormat.format(Date())
+        return monthKeyFormat.format(YearMonth.now(zone()))
     }
 
     /**
      * Returns the month key for a given timestamp, e.g. "2026-09"
      */
     fun getMonthKey(millis: Long): String {
-        return monthKeyFormat.format(Date(millis))
+        return monthKeyFormat.format(toLocalDateTime(millis))
     }
 
     /**
@@ -56,8 +69,7 @@ object DateUtil {
      */
     fun getMonthDisplayName(monthKey: String): String {
         return try {
-            val date = monthKeyFormat.parse(monthKey)
-            if (date != null) monthYearFormat.format(date) else monthKey
+            monthYearFormat.format(YearMonth.parse(monthKey, monthKeyFormat))
         } catch (_: Exception) {
             monthKey
         }
@@ -68,22 +80,36 @@ object DateUtil {
      */
     fun shiftMonthKey(monthKey: String, delta: Int): String {
         return try {
-            val date = monthKeyFormat.parse(monthKey) ?: Date()
-            val cal = Calendar.getInstance().apply {
-                time = date
-                add(Calendar.MONTH, delta)
-            }
-            monthKeyFormat.format(cal.time)
+            monthKeyFormat.format(YearMonth.parse(monthKey, monthKeyFormat).plusMonths(delta.toLong()))
         } catch (_: Exception) {
             getCurrentMonthKey()
         }
     }
 
     /**
+     * Material date pickers work in UTC midnight millis. Converts a local timestamp to the
+     * picker value for the same calendar day.
+     */
+    fun toPickerUtcMillis(localMillis: Long): Long {
+        val date = toLocalDateTime(localMillis).toLocalDate()
+        return date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    }
+
+    /**
+     * Converts a picker value (UTC midnight millis) back to a local timestamp on that calendar
+     * day, keeping the time of day from [keepTimeOf] so same-day ordering stays natural.
+     */
+    fun fromPickerUtcMillis(pickerMillis: Long, keepTimeOf: Long): Long {
+        val date: LocalDate = Instant.ofEpochMilli(pickerMillis).atZone(ZoneOffset.UTC).toLocalDate()
+        val time: LocalTime = toLocalDateTime(keepTimeOf).toLocalTime()
+        return date.atTime(time).atZone(zone()).toInstant().toEpochMilli()
+    }
+
+    /**
      * Returns greeting text based on current hour of day
      */
     fun getGreeting(): String {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val hour = LocalTime.now(zone()).hour
         return when (hour) {
             in 5..11 -> "Good morning"
             in 12..16 -> "Good afternoon"

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -144,6 +145,25 @@ class BudgetsViewModel(application: Application) : AndroidViewModel(application)
     fun deleteBudget(budget: Budget) {
         viewModelScope.launch {
             repository.deleteBudget(budget)
+        }
+    }
+
+    /**
+     * Copies last month's budget limits into [targetMonthKey] for categories that don't have a
+     * budget there yet. Existing budgets for the target month are left unchanged.
+     */
+    fun copyBudgetsFromPreviousMonth(targetMonthKey: String) {
+        viewModelScope.launch {
+            val previousMonthKey = DateUtil.shiftMonthKey(targetMonthKey, -1)
+            val all = repository.allBudgets.first()
+            val alreadySet = all.filter { it.monthKey == targetMonthKey }.map { it.category }.toSet()
+            val toCopy = all.filter { it.monthKey == previousMonthKey && it.category !in alreadySet }
+            if (toCopy.isEmpty()) {
+                showMessage("No budgets from ${DateUtil.getMonthDisplayName(previousMonthKey)} to copy")
+                return@launch
+            }
+            toCopy.forEach { repository.insertBudget(it.copy(id = 0, monthKey = targetMonthKey)) }
+            showMessage("Copied ${toCopy.size} budget${if (toCopy.size == 1) "" else "s"} from ${DateUtil.getMonthDisplayName(previousMonthKey)}")
         }
     }
 

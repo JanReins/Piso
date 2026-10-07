@@ -150,7 +150,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        appViewModel.onAppBackgrounded()
+        // Rotation / theme changes also stop the activity; don't force a PIN re-entry for those.
+        if (!isChangingConfigurations) {
+            appViewModel.onAppBackgrounded()
+        }
     }
 }
 
@@ -338,13 +341,13 @@ fun PisoApp(
             categories = categories,
             subcategories = subcategories,
             onAddCategory = { name, kind, onComplete ->
-                activityViewModel.addCategory(name, kind) { success, _ ->
-                    if (success) onComplete(name)
+                activityViewModel.addCategory(name, kind) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(activityViewModel::showMessage)
                 }
             },
             onAddSubcategory = { parent, name, onComplete ->
-                activityViewModel.addSubcategory(parent, name) { success, _ ->
-                    if (success) onComplete(name)
+                activityViewModel.addSubcategory(parent, name) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(activityViewModel::showMessage)
                 }
             },
             onDismiss = { quickAddType = null },

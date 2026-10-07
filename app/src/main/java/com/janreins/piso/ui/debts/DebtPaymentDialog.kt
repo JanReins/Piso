@@ -144,6 +144,12 @@ fun DebtPaymentDialog(
                         errorMessage = "Please enter an amount greater than 0."
                         return@Button
                     }
+                    // The debt can only drop to zero, so paying more would take extra money out of
+                    // the account without it being recorded anywhere.
+                    if (parsed - debt.remainingAmount > 0.005) {
+                        errorMessage = "Payment can't be more than the ${CurrencyUtil.formatPeso(debt.remainingAmount)} still owed."
+                        return@Button
+                    }
                     onConfirmPayment(parsed, selectedAccountId)
                 },
                 modifier = Modifier.testTag("debt_payment_confirm_button"),

@@ -16,3 +16,7 @@
 local.properties
 .env
 debug.keystore
+# Signing keys - never commit
+*.jks
+*.keystore
+*.jks.b64

@@ -2,6 +2,7 @@ package com.janreins.piso
 
 import com.janreins.piso.data.models.Account
 import com.janreins.piso.data.models.BackupData
+import com.janreins.piso.data.models.Investment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -35,6 +36,23 @@ class BackupDataTest {
         val parsed = BackupData.fromJsonString(exported)
         assertNotNull(parsed)
         assertEquals("Wallet", parsed!!.accounts.single().name)
+    }
+
+    @Test
+    fun investmentLastUpdatedSurvivesRoundTrip() {
+        val exported = BackupData(
+            accounts = emptyList(),
+            transactions = emptyList(),
+            budgets = emptyList(),
+            goals = emptyList(),
+            debts = emptyList(),
+            investments = listOf(
+                Investment(id = 1, name = "PSEi fund", kind = "Stocks", currentValue = 5000.0, lastUpdatedMillis = 1_700_000_000_000)
+            )
+        ).toJsonString()
+
+        val parsed = BackupData.fromJsonString(exported)!!
+        assertEquals(1_700_000_000_000, parsed.investments.single().lastUpdatedMillis)
     }
 
     @Test

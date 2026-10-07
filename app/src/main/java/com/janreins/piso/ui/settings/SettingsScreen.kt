@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.NoEncryption
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -123,6 +124,23 @@ fun SettingsScreen(
                     viewModel.showMessage("Backup file saved successfully")
                 } catch (e: Exception) {
                     viewModel.showMessage("Failed to write backup file")
+                }
+            }
+        }
+    }
+
+    val createCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.exportTransactionsCsv { csv ->
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        outputStream.write(csv.toByteArray(Charsets.UTF_8))
+                    }
+                    viewModel.showMessage("Transactions exported to CSV")
+                } catch (e: Exception) {
+                    viewModel.showMessage("Failed to write CSV file")
                 }
             }
         }
@@ -555,6 +573,26 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Import File", fontSize = 13.sp)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Spreadsheet export (read-only; not a backup)
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.setSkipLockOnce(true)
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            createCsvLauncher.launch("Piso_Transactions_$dateStr.csv")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .testTag("export_csv_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Export Transactions (CSV)", fontSize = 13.sp)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1159,13 +1197,8 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.importBackup(fileJson) { success ->
-                            if (success) {
-                                pendingFileImportJson = null
-                            } else {
-                                viewModel.showMessage("This is not a valid Piso backup.")
-                                pendingFileImportJson = null
-                            }
+                        viewModel.importBackup(fileJson) {
+                            pendingFileImportJson = null
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
@@ -1259,6 +1292,7 @@ fun SettingsScreen(
                             putExtra(Intent.EXTRA_SUBJECT, "Piso Backup")
                             putExtra(Intent.EXTRA_TEXT, jsonString)
                         }
+                        viewModel.setSkipLockOnce(true)
                         context.startActivity(Intent.createChooser(shareIntent, "Share Backup"))
                         showExportTextDialog = null
                     }

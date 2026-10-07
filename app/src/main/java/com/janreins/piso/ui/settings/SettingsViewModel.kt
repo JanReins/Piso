@@ -10,6 +10,7 @@ import com.janreins.piso.data.local.UserProfileManager
 import com.janreins.piso.data.models.UserCategory
 import com.janreins.piso.data.models.UserSubcategory
 import com.janreins.piso.data.repository.FinanceRepository
+import com.janreins.piso.util.CsvExporter
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -113,18 +114,43 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // --- Backup & Restore & Clear ---
     fun exportBackup(onSuccess: (String) -> Unit) {
         viewModelScope.launch {
-            val json = repository.exportBackupJson()
+            val json = try {
+                repository.exportBackupJson()
+            } catch (e: Exception) {
+                showMessage("Couldn't create backup")
+                return@launch
+            }
             onSuccess(json)
+        }
+    }
+
+    fun exportTransactionsCsv(onSuccess: (String) -> Unit) {
+        viewModelScope.launch {
+            val csv = try {
+                CsvExporter.transactionsToCsv(
+                    transactions = repository.allTransactions.first(),
+                    accounts = repository.allAccounts.first()
+                )
+            } catch (e: Exception) {
+                showMessage("Couldn't create CSV export")
+                return@launch
+            }
+            onSuccess(csv)
         }
     }
 
     fun importBackup(jsonString: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
-            val success = repository.importBackupJson(jsonString)
+            // The restore runs in a single DB transaction, so a failure leaves existing data untouched.
+            val success = try {
+                repository.importBackupJson(jsonString)
+            } catch (e: Exception) {
+                false
+            }
             if (success) {
                 showMessage("Data restored successfully")
             } else {
-                showMessage("Invalid backup format")
+                showMessage("This is not a valid Piso backup.")
             }
             onResult(success)
         }

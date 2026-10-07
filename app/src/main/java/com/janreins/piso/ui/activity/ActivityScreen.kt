@@ -23,20 +23,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,22 +82,44 @@ fun ActivityScreen(
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
 
-    // Filter transactions by selected month & filter type
-    val filteredTransactions = remember(transactions, selectedMonthKey, activityFilter) {
-        transactions.filter { tx ->
-            val matchesMonth = DateUtil.getMonthKey(tx.dateMillis) == selectedMonthKey
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    val accountsMap = remember(accounts) {
+        accounts.associateBy { it.id }
+    }
+
+    val monthTransactions = remember(transactions, selectedMonthKey) {
+        transactions.filter { DateUtil.getMonthKey(it.dateMillis) == selectedMonthKey }
+    }
+
+    // Same rules as the Home "This Month" card: goal contributions are money moved, not spending.
+    val monthIncome = remember(monthTransactions) {
+        monthTransactions.filter { it.type == "INCOME" && it.goalId == null && it.goalFlow == null }.sumOf { it.amount }
+    }
+    val monthSpent = remember(monthTransactions) {
+        monthTransactions.filter { it.type == "EXPENSE" && it.goalId == null && it.goalFlow == null }.sumOf { it.amount }
+    }
+
+    // Filter transactions by selected month, filter type & search text
+    val filteredTransactions = remember(monthTransactions, activityFilter, searchQuery, accountsMap) {
+        val query = searchQuery.trim()
+        monthTransactions.filter { tx ->
             val matchesType = when (activityFilter) {
                 "INCOME" -> tx.type == "INCOME"
                 "EXPENSE" -> tx.type == "EXPENSE"
                 "TRANSFER" -> tx.type == "TRANSFER"
                 else -> true
             }
-            matchesMonth && matchesType
+            val matchesSearch = query.isEmpty() || listOfNotNull(
+                tx.category,
+                tx.subcategory,
+                tx.note,
+                tx.accountId?.let { accountsMap[it]?.name },
+                tx.transferToId?.let { accountsMap[it]?.name },
+                CurrencyUtil.formatInputAmount(tx.amount)
+            ).any { it.contains(query, ignoreCase = true) }
+            matchesType && matchesSearch
         }
-    }
-
-    val accountsMap = remember(accounts) {
-        accounts.associateBy { it.id }
     }
 
     Scaffold(
@@ -194,6 +220,44 @@ fun ActivityScreen(
                 }
             }
 
+            // --- Search ---
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search category, note, account or amount") },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear search")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("activity_search_input")
+            )
+
+            // --- Month Totals ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MonthTotal(label = "Income", amount = monthIncome, color = IncomeGreen, modifier = Modifier.weight(1f))
+                MonthTotal(label = "Spent", amount = monthSpent, color = ExpenseRed, modifier = Modifier.weight(1f))
+                MonthTotal(
+                    label = "Net",
+                    amount = monthIncome - monthSpent,
+                    color = if (monthIncome - monthSpent >= 0) IncomeGreen else ExpenseRed,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // --- Transactions List or Empty State ---
             if (filteredTransactions.isEmpty()) {
                 Box(
@@ -203,7 +267,12 @@ fun ActivityScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     PisoEmptyState(
-                        message = "No transactions yet – add your first one!",
+                        message = when {
+                            transactions.isEmpty() -> "No transactions yet – add your first one!"
+                            searchQuery.isNotBlank() -> "No transactions match \"${searchQuery.trim()}\"."
+                            monthTransactions.isEmpty() -> "No transactions in ${DateUtil.getMonthDisplayName(selectedMonthKey)}."
+                            else -> "Nothing here for this filter."
+                        },
                         icon = Icons.Default.ReceiptLong
                     )
                 }
@@ -350,13 +419,13 @@ fun ActivityScreen(
             categories = categories,
             subcategories = subcategories,
             onAddCategory = { name, kind, onComplete ->
-                viewModel.addCategory(name, kind) { success, _ ->
-                    if (success) onComplete(name)
+                viewModel.addCategory(name, kind) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
             onAddSubcategory = { parent, name, onComplete ->
-                viewModel.addSubcategory(parent, name) { success, _ ->
-                    if (success) onComplete(name)
+                viewModel.addSubcategory(parent, name) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
             onDismiss = { showAddDialog = false },
@@ -375,13 +444,13 @@ fun ActivityScreen(
             categories = categories,
             subcategories = subcategories,
             onAddCategory = { name, kind, onComplete ->
-                viewModel.addCategory(name, kind) { success, _ ->
-                    if (success) onComplete(name)
+                viewModel.addCategory(name, kind) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
             onAddSubcategory = { parent, name, onComplete ->
-                viewModel.addSubcategory(parent, name) { success, _ ->
-                    if (success) onComplete(name)
+                viewModel.addSubcategory(parent, name) { success, error ->
+                    if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
             onDismiss = { transactionToEdit = null },
@@ -404,6 +473,33 @@ fun ActivityScreen(
                 transactionToDelete = null
             },
             onDismiss = { transactionToDelete = null }
+        )
+    }
+}
+
+@Composable
+private fun MonthTotal(
+    label: String,
+    amount: Double,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = CurrencyUtil.formatPeso(amount),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            color = color,
+            maxLines = 1
         )
     }
 }

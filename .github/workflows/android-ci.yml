@@ -1,14 +1,23 @@
 name: Android CI
 
+# Runs unit tests and builds an installable debug APK on every push and pull request.
+# Download the APK from the run's "Artifacts" section (Actions tab -> pick the run).
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
+    tags-ignore: [ "**" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -20,8 +29,34 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Set up Gradle (with caching)
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Run Unit Tests
+      - name: Run unit tests
         run: ./gradlew test
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      # Compiles the minified (R8) release variant so shrinker problems surface before a release.
+      - name: Verify release build
+        run: ./gradlew assembleRelease
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: piso-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/
+          retention-days: 7

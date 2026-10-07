@@ -101,6 +101,7 @@ data class BackupData(
             obj.put("currentValue", inv.currentValue)
             obj.put("notes", inv.notes)
             if (inv.quantity != null) obj.put("quantity", inv.quantity)
+            obj.put("lastUpdatedMillis", inv.lastUpdatedMillis)
             invArr.put(obj)
         }
         root.put("investments", invArr)
@@ -241,7 +242,8 @@ data class BackupData(
                             kind = obj.optString("kind", "Other"),
                             currentValue = obj.getDouble("currentValue"),
                             notes = obj.optString("notes", ""),
-                            quantity = if (obj.has("quantity")) obj.getString("quantity") else null
+                            quantity = if (obj.has("quantity")) obj.getString("quantity") else null,
+                            lastUpdatedMillis = obj.optLong("lastUpdatedMillis", System.currentTimeMillis())
                         )
                     )
                 }

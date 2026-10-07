@@ -14,14 +14,36 @@ android {
     applicationId = "com.janreins.piso"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1
-    versionName = "1.0"
+    // CI release builds pass these so each published APK can be installed over the previous one
+    versionCode = providers.environmentVariable("PISO_VERSION_CODE").orNull?.toIntOrNull() ?: 1
+    versionName = providers.environmentVariable("PISO_VERSION_NAME").orNull ?: "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  // Release signing comes from environment variables (set by the GitHub release workflow, or
+  // locally). Without them the release APK is signed with the debug key so it still installs.
+  val releaseKeystore = providers.environmentVariable("PISO_KEYSTORE_FILE").orNull
+  val hasReleaseKeystore = releaseKeystore != null && file(releaseKeystore).exists()
+
+  signingConfigs {
+    if (hasReleaseKeystore) {
+      create("release") {
+        storeFile = file(releaseKeystore!!)
+        storePassword = providers.environmentVariable("PISO_KEYSTORE_PASSWORD").orNull
+        keyAlias = providers.environmentVariable("PISO_KEY_ALIAS").orNull
+        keyPassword = providers.environmentVariable("PISO_KEY_PASSWORD").orNull
+      }
+    }
+  }
+
   buildTypes {
     release {
+      signingConfig = if (hasReleaseKeystore) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
+      }
       isCrunchPngs = false
       isMinifyEnabled = true
       isShrinkResources = true

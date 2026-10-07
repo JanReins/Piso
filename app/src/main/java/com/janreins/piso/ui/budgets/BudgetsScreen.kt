@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PieChart
@@ -24,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +73,12 @@ fun BudgetsScreen(
         budgets.filter { it.monthKey == currentMonthKey }
     }
 
+    val previousMonthKey = DateUtil.shiftMonthKey(currentMonthKey, -1)
+    val copyableFromLastMonth = remember(budgets, currentMonthKey) {
+        val alreadySet = budgets.filter { it.monthKey == currentMonthKey }.map { it.category }.toSet()
+        budgets.count { it.monthKey == previousMonthKey && it.category !in alreadySet }
+    }
+
     var showAddDialog by remember { mutableStateOf(false) }
     var budgetToEdit by remember { mutableStateOf<Budget?>(null) }
     var budgetToDelete by remember { mutableStateOf<Budget?>(null) }
@@ -90,6 +99,18 @@ fun BudgetsScreen(
                     }
                 },
                 actions = {
+                    if (copyableFromLastMonth > 0) {
+                        IconButton(
+                            onClick = { viewModel.copyBudgetsFromPreviousMonth(currentMonthKey) },
+                            modifier = Modifier.testTag("budget_copy_last_month_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy last month's budgets",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { showAddDialog = true },
                         modifier = Modifier.testTag("budget_add_header_button")
@@ -157,10 +178,23 @@ fun BudgetsScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    PisoEmptyState(
-                        message = "No budgets set yet.",
-                        icon = Icons.Default.PieChart
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        PisoEmptyState(
+                            message = "No budgets set for $currentMonthName yet.",
+                            icon = Icons.Default.PieChart
+                        )
+                        if (copyableFromLastMonth > 0) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.copyBudgetsFromPreviousMonth(currentMonthKey) },
+                                modifier = Modifier.testTag("budget_copy_last_month_empty_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Copy ${DateUtil.getMonthDisplayName(previousMonthKey)} budgets")
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyColumn(
