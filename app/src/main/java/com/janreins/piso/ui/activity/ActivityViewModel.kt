@@ -131,7 +131,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun addSubcategory(parentCategoryName: String, name: String, onResult: (Boolean, String?) -> Unit) {
+    fun addSubcategory(parentCategoryName: String, parentKind: String, name: String, onResult: (Boolean, String?) -> Unit) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
             onResult(false, "Subcategory name cannot be empty")
@@ -139,11 +139,11 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             val existing = repository.allSubcategories.first()
-            if (existing.any { it.parentCategoryName.equals(parentCategoryName, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
+            if (existing.any { it.parentCategoryName.equals(parentCategoryName, ignoreCase = true) && it.parentKind.equals(parentKind, ignoreCase = true) && it.name.equals(trimmed, ignoreCase = true) }) {
                 onResult(false, "Subcategory '$trimmed' already exists under $parentCategoryName")
                 return@launch
             }
-            val newSub = UserSubcategory(parentCategoryName = parentCategoryName, name = trimmed, isArchived = false)
+            val newSub = UserSubcategory(parentCategoryName = parentCategoryName, name = trimmed, isArchived = false, parentKind = parentKind.uppercase())
             repository.insertSubcategory(newSub)
             showMessage("Subcategory '$trimmed' added")
             onResult(true, null)

@@ -41,9 +41,14 @@ fun AddMoneyGoalDialog(
     onConfirmAdd: (amount: Double, fromAccountId: Long?) -> Unit
 ) {
     var amountText by remember { mutableStateOf("") }
+    // Default to an account other than the one the goal is kept in, so the contribution is a
+    // real move of money into the goal's account.
     var selectedAccountId by remember {
-        mutableStateOf(goal.accountId ?: accounts.firstOrNull()?.id)
+        mutableStateOf(
+            accounts.firstOrNull { it.id != goal.accountId }?.id ?: accounts.firstOrNull()?.id
+        )
     }
+    val goalAccount = accounts.find { it.id == goal.accountId }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -89,7 +94,7 @@ fun AddMoneyGoalDialog(
 
                 // Source Account
                 if (accounts.isNotEmpty()) {
-                    val currentAccountName = accounts.find { it.id == selectedAccountId }?.name ?: "None (Just adjust goal balance)"
+                    val currentAccountName = accounts.find { it.id == selectedAccountId }?.name ?: "None (just update goal progress)"
                     ExposedDropdownMenuBox(
                         expanded = accountDropdownExpanded,
                         onExpandedChange = { accountDropdownExpanded = !accountDropdownExpanded },
@@ -99,7 +104,7 @@ fun AddMoneyGoalDialog(
                             value = currentAccountName,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Deduct from Account") },
+                            label = { Text("From Account") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded) },
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
@@ -112,7 +117,7 @@ fun AddMoneyGoalDialog(
                             onDismissRequest = { accountDropdownExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("None (Just adjust goal balance)") },
+                                text = { Text("None (just update goal progress)") },
                                 onClick = {
                                     selectedAccountId = null
                                     accountDropdownExpanded = false
@@ -130,6 +135,22 @@ fun AddMoneyGoalDialog(
                         }
                     }
                 }
+
+                // Explain what happens to account balances
+                val sourceAccount = accounts.find { it.id == selectedAccountId }
+                Text(
+                    text = when {
+                        sourceAccount != null && goalAccount != null && sourceAccount.id != goalAccount.id ->
+                            "Moves the money from ${sourceAccount.name} to ${goalAccount.name}, where this goal is kept."
+                        sourceAccount != null ->
+                            "The money stays in ${sourceAccount.name} and is set aside for this goal. Your balance and net worth don't change."
+                        else ->
+                            "Only the goal's progress changes. No account balance changes."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("add_money_effect_text")
+                )
 
                 if (errorMessage != null) {
                     Text(

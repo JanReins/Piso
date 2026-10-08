@@ -1,6 +1,10 @@
 package com.janreins.piso.util
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormat
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
@@ -42,7 +46,18 @@ object CurrencyUtil {
     fun parseAmount(text: String): Double? {
         val clean = text.trim().replace(",", "").replace("₱", "")
         val value = clean.toDoubleOrNull() ?: return null
-        return if (value.isFinite()) value else null
+        return if (value.isFinite()) roundCents(value) else null
+    }
+
+    /**
+     * Rounds to whole centavos (half-up). Money is stored as Double, so every stored amount and
+     * running balance is rounded to keep binary floating-point residue (e.g. 0.7 + 0.1 =
+     * 0.7999999...) from accumulating or tipping comparisons such as "goal reached".
+     */
+    fun roundCents(amount: Double): Double {
+        if (!amount.isFinite()) return amount
+        val rounded = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toDouble()
+        return if (rounded == 0.0) 0.0 else rounded // normalise -0.0
     }
 
     /**

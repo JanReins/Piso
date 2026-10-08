@@ -212,8 +212,11 @@ fun CategoriesScreen(
             ) {
                 items(filteredCategories, key = { it.id }) { category ->
                     val isExpanded = expandedCategoryNames.contains(category.name)
-                    val catSubcategories = remember(subcategories, category.name) {
-                        subcategories.filter { it.parentCategoryName.equals(category.name, ignoreCase = true) }
+                    val catSubcategories = remember(subcategories, category.name, category.kind) {
+                        subcategories.filter {
+                            it.parentCategoryName.equals(category.name, ignoreCase = true) &&
+                                it.parentKind.equals(category.kind, ignoreCase = true)
+                        }
                     }
 
                     CategoryListItem(
@@ -289,7 +292,7 @@ fun CategoriesScreen(
             placeholder = "e.g. Groceries, Dining out",
             onDismiss = { parentForNewSubcategory = null },
             onConfirm = { subName ->
-                viewModel.addSubcategory(parentCat.name, subName) { success, errorMsg ->
+                viewModel.addSubcategory(parentCat.name, parentCat.kind, subName) { success, errorMsg ->
                     if (success) {
                         // Ensure parent is expanded so user sees new subcategory
                         expandedCategoryNames = expandedCategoryNames + parentCat.name

@@ -18,7 +18,7 @@ data class BackupData(
 ) {
     fun toJsonString(): String {
         val root = JSONObject()
-        root.put("version", 2)
+        root.put("version", 3)
         root.put("appName", "Piso")
         root.put("exportedAt", System.currentTimeMillis())
 
@@ -124,6 +124,7 @@ data class BackupData(
             obj.put("parentCategoryName", sub.parentCategoryName)
             obj.put("name", sub.name)
             obj.put("isArchived", sub.isArchived)
+            obj.put("parentKind", sub.parentKind)
             subcatArr.put(obj)
         }
         root.put("subcategories", subcatArr)
@@ -266,14 +267,28 @@ data class BackupData(
                 val subcatArr = root.optJSONArray("subcategories") ?: JSONArray()
                 for (i in 0 until subcatArr.length()) {
                     val obj = subcatArr.getJSONObject(i)
-                    subcategories.add(
-                        UserSubcategory(
-                            id = obj.optLong("id", 0L),
-                            parentCategoryName = obj.getString("parentCategoryName"),
-                            name = obj.getString("name"),
-                            isArchived = obj.optBoolean("isArchived", false)
-                        )
+                    val parentName = obj.getString("parentCategoryName")
+                    val sub = UserSubcategory(
+                        id = obj.optLong("id", 0L),
+                        parentCategoryName = parentName,
+                        name = obj.getString("name"),
+                        isArchived = obj.optBoolean("isArchived", false)
                     )
+                    val storedKind = obj.optString("parentKind", "").uppercase()
+                    if (storedKind == "INCOME" || storedKind == "EXPENSE") {
+                        subcategories.add(sub.copy(parentKind = storedKind))
+                    } else {
+                        // Older backups have no kind: attach to whichever kind(s) use the parent name
+                        val kinds = categories.filter { it.name == parentName }.map { it.kind.uppercase() }.distinct()
+                        if (kinds.isEmpty()) {
+                            subcategories.add(sub.copy(parentKind = "EXPENSE"))
+                        } else {
+                            kinds.forEachIndexed { index, kind ->
+                                // Only the first copy keeps the original id so ids stay unique
+                                subcategories.add(sub.copy(id = if (index == 0) sub.id else 0L, parentKind = kind))
+                            }
+                        }
+                    }
                 }
 
                 BackupData(accounts, transactions, budgets, goals, debts, investments, categories, subcategories)

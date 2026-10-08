@@ -42,6 +42,39 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 }
 
 /**
+ * Adds the parent kind to subcategories. Existing subcategories are assigned to whichever
+ * category kind(s) use their parent name; a name used by both kinds gets a copy for each.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `user_subcategories` ADD COLUMN `parentKind` TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            """
+            UPDATE `user_subcategories` SET `parentKind` = 'EXPENSE'
+            WHERE `parentCategoryName` IN (SELECT `name` FROM `user_categories` WHERE `kind` = 'EXPENSE')
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `user_subcategories` (`parentCategoryName`, `name`, `isArchived`, `parentKind`)
+            SELECT `parentCategoryName`, `name`, `isArchived`, 'INCOME' FROM `user_subcategories`
+            WHERE `parentKind` = 'EXPENSE'
+              AND `parentCategoryName` IN (SELECT `name` FROM `user_categories` WHERE `kind` = 'INCOME')
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            UPDATE `user_subcategories` SET `parentKind` = 'INCOME'
+            WHERE `parentKind` = ''
+              AND `parentCategoryName` IN (SELECT `name` FROM `user_categories` WHERE `kind` = 'INCOME')
+            """.trimIndent()
+        )
+        // Orphans (parent category no longer exists) default to expense
+        db.execSQL("UPDATE `user_subcategories` SET `parentKind` = 'EXPENSE' WHERE `parentKind` = ''")
+    }
+}
+
+/**
  * Main Room Database for Piso personal money book.
  */
 @Database(
@@ -55,7 +88,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         UserCategory::class,
         UserSubcategory::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -79,7 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "piso_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

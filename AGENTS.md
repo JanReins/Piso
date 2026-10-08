@@ -17,5 +17,5 @@ JanReins/Piso is a private, 100% on-device, offline-only personal finance and mo
 - **Do Not Touch**:
   - `FinanceRepository` balance calculation, goal, and debt handling logic (unless explicitly instructed in a task brief).
   - `UserProfileManager` PIN hashing, salt generation, and lockout mechanisms (unless explicitly instructed).
-  - Room entities, DAOs, and database migrations (`MIGRATION_1_2` / database version changes).
+  - Room entities, DAOs, and database migrations (`MIGRATION_1_2`, `MIGRATION_2_3` / database version changes). Any schema change needs a new migration plus a case in `DatabaseMigrationTest`.
   - Compose UI screens, components, and navigation structures unless tasked specifically.

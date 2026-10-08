@@ -286,6 +286,7 @@ fun ActivityScreen(
                     items(filteredTransactions, key = { it.id }) { tx ->
                         val accountName = tx.accountId?.let { accountsMap[it]?.name }
                         val toAccountName = tx.transferToId?.let { accountsMap[it]?.name }
+                        val isGoalTransfer = tx.type == "TRANSFER" && (tx.goalId != null || tx.goalFlow != null)
 
                         PisoCard(
                             contentPadding = 14.dp,
@@ -340,7 +341,14 @@ fun ActivityScreen(
                                     Column {
                                         Text(
                                             text = if (tx.type == "TRANSFER") {
-                                                if (accountName != null && toAccountName != null) {
+                                                if (isGoalTransfer) {
+                                                    // Goal contributions: money set aside or moved to the goal's account
+                                                    if (accountName != null && toAccountName != null && tx.accountId != tx.transferToId) {
+                                                        "Savings: $accountName → $toAccountName"
+                                                    } else {
+                                                        "Savings"
+                                                    }
+                                                } else if (accountName != null && toAccountName != null) {
                                                     "$accountName → $toAccountName"
                                                 } else {
                                                     "Transfer"
@@ -357,7 +365,7 @@ fun ActivityScreen(
                                                     append(" · ")
                                                 }
                                                 append(DateUtil.formatDate(tx.dateMillis))
-                                                if (accountName != null && tx.type != "TRANSFER") {
+                                                if (accountName != null && (tx.type != "TRANSFER" || (isGoalTransfer && tx.accountId == tx.transferToId))) {
                                                     append(" · ")
                                                     append(accountName)
                                                 }
@@ -423,8 +431,8 @@ fun ActivityScreen(
                     if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
-            onAddSubcategory = { parent, name, onComplete ->
-                viewModel.addSubcategory(parent, name) { success, error ->
+            onAddSubcategory = { parent, kind, name, onComplete ->
+                viewModel.addSubcategory(parent, kind, name) { success, error ->
                     if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
@@ -448,8 +456,8 @@ fun ActivityScreen(
                     if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },
-            onAddSubcategory = { parent, name, onComplete ->
-                viewModel.addSubcategory(parent, name) { success, error ->
+            onAddSubcategory = { parent, kind, name, onComplete ->
+                viewModel.addSubcategory(parent, kind, name) { success, error ->
                     if (success) onComplete(name.trim()) else error?.let(viewModel::showMessage)
                 }
             },

@@ -21,6 +21,9 @@ interface GoalDao {
     @Query("SELECT * FROM goals WHERE id = :id")
     suspend fun getGoalById(id: Long): Goal?
 
+    @Query("UPDATE goals SET accountId = NULL WHERE accountId = :accountId")
+    suspend fun detachAccount(accountId: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGoal(goal: Goal): Long
 

@@ -32,4 +32,13 @@ class CurrencyUtilTest {
         assertEquals("-₱1,500.00", CurrencyUtil.formatPeso(-1500.0))
         assertEquals("₱12,500.00", CurrencyUtil.formatPeso(12500.0))
     }
+
+    @Test
+    fun roundCents_roundsHalfUpToCentavos() {
+        assertEquals(0.8, CurrencyUtil.roundCents(0.7 + 0.1), 0.0)
+        assertEquals(1.01, CurrencyUtil.roundCents(1.005), 0.0)
+        assertEquals(-2.5, CurrencyUtil.roundCents(-2.499999999), 0.0)
+        assertEquals(12.35, CurrencyUtil.parseAmount("12.345")!!, 0.0)
+        assertNull(CurrencyUtil.parsePositiveAmount("0.001"))
+    }
 }

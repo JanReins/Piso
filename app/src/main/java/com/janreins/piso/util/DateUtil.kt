@@ -1,5 +1,9 @@
 package com.janreins.piso.util
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -56,6 +60,19 @@ object DateUtil {
     fun getCurrentMonthKey(): String {
         return monthKeyFormat.format(YearMonth.now(zone()))
     }
+
+    /**
+     * Emits the current month key now and again whenever the month changes, so screens left
+     * open across midnight at month-end move on to the new month. Checks once a minute while
+     * collected; collection restarts (and re-reads the clock) when the app comes back to the
+     * foreground.
+     */
+    fun currentMonthKeyFlow(checkIntervalMillis: Long = 60_000L): Flow<String> = flow {
+        while (true) {
+            emit(getCurrentMonthKey())
+            delay(checkIntervalMillis)
+        }
+    }.distinctUntilChanged()
 
     /**
      * Returns the month key for a given timestamp, e.g. "2026-09"

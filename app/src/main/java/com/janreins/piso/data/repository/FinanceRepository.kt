@@ -12,6 +12,7 @@ import com.janreins.piso.data.models.Investment
 import com.janreins.piso.data.models.Transaction
 import com.janreins.piso.data.models.UserCategory
 import com.janreins.piso.data.models.UserSubcategory
+import com.janreins.piso.util.CurrencyUtil.roundCents
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlin.math.max
@@ -50,8 +51,8 @@ class FinanceRepository(private val database: AppDatabase) {
     fun getCategoriesByKind(kind: String): Flow<List<UserCategory>> =
         categoryDao.getCategoriesByKind(kind)
 
-    fun getSubcategoriesForParent(parentName: String): Flow<List<UserSubcategory>> =
-        categoryDao.getSubcategoriesForParent(parentName)
+    fun getSubcategoriesForParent(parentName: String, parentKind: String): Flow<List<UserSubcategory>> =
+        categoryDao.getSubcategoriesForParent(parentName, parentKind)
 
     // --- Seeding Default Categories ---
     suspend fun seedDefaultCategoriesIfEmpty() {
@@ -66,9 +67,9 @@ class FinanceRepository(private val database: AppDatabase) {
             categoryDao.insertCategories(expenseCats + incomeCats)
 
             val defaultFoodSubcategories = listOf(
-                UserSubcategory(parentCategoryName = "Food", name = "Groceries", isArchived = false),
-                UserSubcategory(parentCategoryName = "Food", name = "Dining out", isArchived = false),
-                UserSubcategory(parentCategoryName = "Food", name = "Coffee", isArchived = false)
+                UserSubcategory(parentCategoryName = "Food", name = "Groceries", parentKind = "EXPENSE"),
+                UserSubcategory(parentCategoryName = "Food", name = "Dining out", parentKind = "EXPENSE"),
+                UserSubcategory(parentCategoryName = "Food", name = "Coffee", parentKind = "EXPENSE")
             )
             categoryDao.insertSubcategories(defaultFoodSubcategories)
         }
@@ -84,18 +85,9 @@ class FinanceRepository(private val database: AppDatabase) {
         val kind = category.kind.uppercase()
         database.withTransaction {
             // A category name can exist for both kinds (e.g. "Other"), so only touch
-            // transactions and budgets of this category's own kind.
-            val nameSharedWithOtherKind = categoryDao.getAllCategories().first()
-                .any { it.id != category.id && it.name == category.name }
+            // subcategories, transactions and budgets of this category's own kind.
             categoryDao.updateCategory(category.copy(name = trimmedNewName))
-            if (nameSharedWithOtherKind) {
-                // Subcategories are keyed by parent name only; copy them so the other kind keeps its own
-                val subs = categoryDao.getAllSubcategories().first()
-                    .filter { it.parentCategoryName == category.name }
-                categoryDao.insertSubcategories(subs.map { it.copy(id = 0, parentCategoryName = trimmedNewName) })
-            } else {
-                categoryDao.updateSubcategoriesParentName(category.name, trimmedNewName)
-            }
+            categoryDao.updateSubcategoriesParentName(category.name, trimmedNewName, kind)
             categoryDao.updateTransactionsCategoryNameForType(category.name, trimmedNewName, kind)
             if (kind == "EXPENSE") {
                 categoryDao.updateBudgetsCategoryName(category.name, trimmedNewName)
@@ -115,6 +107,8 @@ class FinanceRepository(private val database: AppDatabase) {
                 categoryDao.updateCategory(category.copy(isArchived = true))
             } else {
                 categoryDao.deleteCategory(category)
+                // Otherwise they'd reappear under a new category that reuses the name
+                categoryDao.deleteSubcategoriesForParent(category.name, category.kind.uppercase())
             }
         }
     }
@@ -131,7 +125,8 @@ class FinanceRepository(private val database: AppDatabase) {
             categoryDao.updateTransactionsSubcategoryName(
                 subcategory.parentCategoryName,
                 subcategory.name,
-                trimmedNewName
+                trimmedNewName,
+                subcategory.parentKind.uppercase()
             )
         }
     }
@@ -144,7 +139,8 @@ class FinanceRepository(private val database: AppDatabase) {
         database.withTransaction {
             val count = categoryDao.countTransactionsForSubcategory(
                 subcategory.parentCategoryName,
-                subcategory.name
+                subcategory.name,
+                subcategory.parentKind.uppercase()
             )
             if (count > 0) {
                 // Archive if referenced
@@ -156,230 +152,234 @@ class FinanceRepository(private val database: AppDatabase) {
     }
 
     // --- Accounts ---
-    suspend fun insertAccount(account: Account): Long = accountDao.insertAccount(account)
+    suspend fun insertAccount(account: Account): Long =
+        accountDao.insertAccount(account.copy(balance = roundCents(account.balance)))
 
-    suspend fun updateAccount(account: Account) = accountDao.updateAccount(account)
+    /**
+     * Updates an account's name, kind and notes. The balance is owned by the transaction logic,
+     * so it is taken from the database rather than from the (possibly stale) caller copy.
+     */
+    suspend fun updateAccount(account: Account) {
+        database.withTransaction {
+            val stored = accountDao.getAccountById(account.id) ?: return@withTransaction
+            accountDao.updateAccount(account.copy(balance = stored.balance))
+        }
+    }
 
     suspend fun hasTransactionsForAccount(accountId: Long): Boolean =
         transactionDao.getTransactionCountForAccount(accountId) > 0
 
     suspend fun deleteAccount(account: Account): Boolean {
-        if (hasTransactionsForAccount(account.id)) {
-            return false
+        return database.withTransaction {
+            if (hasTransactionsForAccount(account.id)) {
+                return@withTransaction false
+            }
+            accountDao.deleteAccount(account)
+            goalDao.detachAccount(account.id)
+            true
         }
-        accountDao.deleteAccount(account)
-        return true
     }
 
     // --- Transactions & Balance Logic ---
+    //
+    // Account balances, goal progress and debt balances are stored values kept in step with
+    // the transactions table: every insert applies a transaction's effect, every delete reverts
+    // it, and an edit reverts the stored version before applying the new one. All of it runs
+    // inside a database transaction so a failure can't leave half an update behind.
+
     suspend fun addTransaction(tx: Transaction): Long {
+        val normalized = tx.copy(amount = roundCents(tx.amount))
         return database.withTransaction {
-            applyTransactionBalance(tx)
-            transactionDao.insertTransaction(tx)
+            applyTransactionBalance(normalized)
+            transactionDao.insertTransaction(normalized)
         }
     }
 
     suspend fun updateTransaction(oldTx: Transaction, newTx: Transaction) {
         database.withTransaction {
-            // Revert old transaction effect
-            revertTransactionBalance(oldTx)
-            // Apply new transaction effect
-            applyTransactionBalance(newTx)
-            transactionDao.updateTransaction(newTx)
+            // Revert what is actually stored, not the caller's copy, which may be stale.
+            // If the row is gone (already deleted) there is nothing to update.
+            val stored = transactionDao.getTransactionById(oldTx.id) ?: return@withTransaction
+            val normalized = newTx.copy(id = stored.id, amount = roundCents(newTx.amount))
+            revertTransactionBalance(stored)
+            applyTransactionBalance(normalized)
+            transactionDao.updateTransaction(normalized)
         }
     }
 
     suspend fun deleteTransaction(tx: Transaction) {
         database.withTransaction {
-            revertTransactionBalance(tx)
-            transactionDao.deleteTransaction(tx)
+            // Re-read so a repeated delete (e.g. a double tap) can't revert the effect twice
+            val stored = transactionDao.getTransactionById(tx.id) ?: return@withTransaction
+            revertTransactionBalance(stored)
+            transactionDao.deleteTransaction(stored)
         }
     }
 
-    private suspend fun applyTransactionBalance(tx: Transaction) {
-        when (tx.type) {
-            "INCOME" -> {
-                tx.accountId?.let { accId ->
-                    val acc = accountDao.getAccountById(accId)
-                    if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance + tx.amount))
-                    }
-                }
-            }
-            "EXPENSE" -> {
-                tx.accountId?.let { accId ->
-                    val acc = accountDao.getAccountById(accId)
-                    if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance - tx.amount))
-                    }
-                }
-                // Mirror revertTransactionBalance so editing a debt payment or goal
-                // contribution re-applies it instead of only undoing it.
-                tx.debtId?.let { debtId ->
-                    val debt = debtDao.getDebtById(debtId)
-                    if (debt != null) {
-                        debtDao.updateDebt(debt.copy(remainingAmount = max(0.0, debt.remainingAmount - tx.amount)))
-                    }
-                }
-                if (tx.goalFlow == "IN" && tx.goalId != null) {
-                    val goal = goalDao.getGoalById(tx.goalId)
-                    if (goal != null) {
-                        val newAmount = goal.currentAmount + tx.amount
-                        goalDao.updateGoal(goal.copy(currentAmount = newAmount, isCompleted = newAmount >= goal.targetAmount))
-                    }
-                }
-            }
-            "TRANSFER" -> {
-                tx.accountId?.let { fromId ->
-                    val fromAcc = accountDao.getAccountById(fromId)
-                    if (fromAcc != null) {
-                        accountDao.updateAccount(fromAcc.copy(balance = fromAcc.balance - tx.amount))
-                    }
-                }
-                tx.transferToId?.let { toId ->
-                    val toAcc = accountDao.getAccountById(toId)
-                    if (toAcc != null) {
-                        accountDao.updateAccount(toAcc.copy(balance = toAcc.balance + tx.amount))
-                    }
-                }
-            }
-        }
+    private suspend fun adjustAccount(accountId: Long?, delta: Double) {
+        if (accountId == null) return
+        val acc = accountDao.getAccountById(accountId) ?: return
+        accountDao.updateAccount(acc.copy(balance = roundCents(acc.balance + delta)))
     }
 
-    private suspend fun revertTransactionBalance(tx: Transaction) {
+    private suspend fun applyTransactionBalance(tx: Transaction) = applyEffect(tx, sign = 1.0)
+
+    private suspend fun revertTransactionBalance(tx: Transaction) = applyEffect(tx, sign = -1.0)
+
+    /**
+     * Applies (sign = 1) or reverts (sign = -1) a transaction's effect on accounts, goals and
+     * debts.
+     */
+    private suspend fun applyEffect(tx: Transaction, sign: Double) {
+        val amount = tx.amount
         when (tx.type) {
-            "INCOME" -> {
-                tx.accountId?.let { accId ->
-                    val acc = accountDao.getAccountById(accId)
-                    if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance - tx.amount))
-                    }
-                }
-            }
-            "EXPENSE" -> {
-                tx.accountId?.let { accId ->
-                    val acc = accountDao.getAccountById(accId)
-                    if (acc != null) {
-                        accountDao.updateAccount(acc.copy(balance = acc.balance + tx.amount))
-                    }
-                }
-                // If it was linked to a debt payment, restore remaining debt amount
-                tx.debtId?.let { debtId ->
-                    val debt = debtDao.getDebtById(debtId)
-                    if (debt != null) {
-                        // Payments were clamped at 0 remaining, so an overpayment only reduced the
-                        // debt by what was owed. Don't restore more than the original amount.
-                        val cap = max(debt.originalAmount, debt.remainingAmount)
-                        val restored = minOf(debt.remainingAmount + tx.amount, cap)
-                        debtDao.updateDebt(debt.copy(remainingAmount = restored))
-                    }
-                }
-                // If it was linked to a goal contribution, adjust goal current amount
-                if (tx.goalFlow == "IN" && tx.goalId != null) {
-                    val goal = goalDao.getGoalById(tx.goalId)
-                    if (goal != null) {
-                        val newAmount = max(0.0, goal.currentAmount - tx.amount)
-                        goalDao.updateGoal(goal.copy(currentAmount = newAmount, isCompleted = false))
-                    }
-                }
-            }
+            "INCOME" -> adjustAccount(tx.accountId, sign * amount)
+            "EXPENSE" -> adjustAccount(tx.accountId, -sign * amount)
             "TRANSFER" -> {
-                tx.accountId?.let { fromId ->
-                    val fromAcc = accountDao.getAccountById(fromId)
-                    if (fromAcc != null) {
-                        accountDao.updateAccount(fromAcc.copy(balance = fromAcc.balance + tx.amount))
-                    }
-                }
-                tx.transferToId?.let { toId ->
-                    val toAcc = accountDao.getAccountById(toId)
-                    if (toAcc != null) {
-                        accountDao.updateAccount(toAcc.copy(balance = toAcc.balance - tx.amount))
-                    }
-                }
+                adjustAccount(tx.accountId, -sign * amount)
+                adjustAccount(tx.transferToId, sign * amount)
+            }
+        }
+
+        // Debt payment: reduces what's owed, never below zero. A payment can only have reduced
+        // the debt by what was owed, so reverting never restores more than the original amount.
+        tx.debtId?.let { debtId ->
+            val debt = debtDao.getDebtById(debtId) ?: return@let
+            val remaining = if (sign > 0) {
+                max(0.0, debt.remainingAmount - amount)
+            } else {
+                minOf(debt.remainingAmount + amount, max(debt.originalAmount, debt.remainingAmount))
+            }
+            debtDao.updateDebt(debt.copy(remainingAmount = roundCents(remaining)))
+        }
+
+        // Goal contribution ("IN") or withdrawal ("OUT")
+        if (tx.goalId != null && (tx.goalFlow == "IN" || tx.goalFlow == "OUT")) {
+            val goal = goalDao.getGoalById(tx.goalId)
+            if (goal != null) {
+                val direction = if (tx.goalFlow == "IN") 1.0 else -1.0
+                val newAmount = roundCents(max(0.0, goal.currentAmount + sign * direction * amount))
+                goalDao.updateGoal(goal.copy(currentAmount = newAmount, isCompleted = newAmount >= goal.targetAmount))
             }
         }
     }
 
     // --- Goals ---
-    suspend fun insertGoal(goal: Goal): Long = goalDao.insertGoal(goal)
-    suspend fun updateGoal(goal: Goal) = goalDao.updateGoal(goal)
-    suspend fun deleteGoal(goal: Goal) = goalDao.deleteGoal(goal)
+    suspend fun insertGoal(goal: Goal): Long = goalDao.insertGoal(normalizeGoal(goal))
+    suspend fun updateGoal(goal: Goal) = goalDao.updateGoal(normalizeGoal(goal))
 
+    suspend fun deleteGoal(goal: Goal) {
+        database.withTransaction {
+            // Past contributions stay in Activity (still marked as savings moves) but no longer
+            // point at the deleted goal.
+            transactionDao.detachGoal(goal.id)
+            goalDao.deleteGoal(goal)
+        }
+    }
+
+    private fun normalizeGoal(goal: Goal) = goal.copy(
+        targetAmount = roundCents(goal.targetAmount),
+        currentAmount = roundCents(goal.currentAmount)
+    )
+
+    /**
+     * Records a contribution to a goal. A goal is an allocation of money, not a separate asset,
+     * so a contribution never makes money disappear from net worth:
+     *  - If the goal's savings are kept in a different account than [fromAccountId], the
+     *    money moves between the two accounts (a transfer).
+     *  - Otherwise (no linked account, the same account, or no source) the money stays where it
+     *    is and is only set aside for the goal.
+     *
+     * Returns true when the goal is reached.
+     */
     suspend fun addMoneyToGoal(goalId: Long, amount: Double, fromAccountId: Long?): Boolean {
         return database.withTransaction {
             val goal = goalDao.getGoalById(goalId) ?: return@withTransaction false
-            val updatedAmount = goal.currentAmount + amount
-            val completed = updatedAmount >= goal.targetAmount
-            val updatedGoal = goal.copy(
-                currentAmount = updatedAmount,
-                isCompleted = completed
-            )
-            goalDao.updateGoal(updatedGoal)
-
-            // Deduct from account & record goal transaction
-            if (fromAccountId != null) {
-                val acc = accountDao.getAccountById(fromAccountId)
-                if (acc != null) {
-                    accountDao.updateAccount(acc.copy(balance = acc.balance - amount))
-                }
-            }
+            val source = fromAccountId?.takeIf { accountDao.getAccountById(it) != null }
+            val goalAccount = goal.accountId?.takeIf { accountDao.getAccountById(it) != null }
+            val destination = if (source != null && goalAccount != null && goalAccount != source) goalAccount else source
 
             val tx = Transaction(
                 dateMillis = System.currentTimeMillis(),
-                type = "EXPENSE",
+                type = "TRANSFER",
                 category = "Savings",
                 subcategory = "",
-                amount = amount,
+                amount = roundCents(amount),
                 note = "Added to ${goal.name}",
-                accountId = fromAccountId,
+                accountId = source,
+                transferToId = destination, // same as source when the money is only set aside
                 goalId = goalId,
                 goalFlow = "IN"
             )
+            applyTransactionBalance(tx)
             transactionDao.insertTransaction(tx)
-            completed
+            goalDao.getGoalById(goalId)?.isCompleted == true
         }
     }
 
     // --- Debts ---
-    suspend fun insertDebt(debt: Debt): Long = debtDao.insertDebt(debt)
-    suspend fun updateDebt(debt: Debt) = debtDao.updateDebt(debt)
-    suspend fun deleteDebt(debt: Debt) = debtDao.deleteDebt(debt)
+    suspend fun insertDebt(debt: Debt): Long = debtDao.insertDebt(normalizeDebt(debt))
+    suspend fun updateDebt(debt: Debt) = debtDao.updateDebt(normalizeDebt(debt))
+
+    suspend fun deleteDebt(debt: Debt) {
+        database.withTransaction {
+            // Payments stay as ordinary "Debt" expenses; detaching them stops a later debt that
+            // reuses this id (possible after a backup restore) from being changed by them.
+            transactionDao.detachDebt(debt.id)
+            debtDao.deleteDebt(debt)
+        }
+    }
+
+    private fun normalizeDebt(debt: Debt) = debt.copy(
+        originalAmount = roundCents(debt.originalAmount),
+        remainingAmount = roundCents(debt.remainingAmount)
+    )
 
     suspend fun recordDebtPayment(debtId: Long, amount: Double, fromAccountId: Long?) {
         database.withTransaction {
             val debt = debtDao.getDebtById(debtId) ?: return@withTransaction
-            val newRemaining = max(0.0, debt.remainingAmount - amount)
-            debtDao.updateDebt(debt.copy(remainingAmount = newRemaining))
-
-            if (fromAccountId != null) {
-                val acc = accountDao.getAccountById(fromAccountId)
-                if (acc != null) {
-                    accountDao.updateAccount(acc.copy(balance = acc.balance - amount))
-                }
-            }
-
             val tx = Transaction(
                 dateMillis = System.currentTimeMillis(),
                 type = "EXPENSE",
                 category = "Debt",
                 subcategory = "",
-                amount = amount,
+                amount = roundCents(amount),
                 note = "Payment for ${debt.name}",
                 accountId = fromAccountId,
                 debtId = debtId
             )
+            applyTransactionBalance(tx)
             transactionDao.insertTransaction(tx)
         }
     }
 
     // --- Budgets ---
-    suspend fun insertBudget(budget: Budget): Long = budgetDao.insertBudget(budget)
-    suspend fun updateBudget(budget: Budget) = budgetDao.updateBudget(budget)
+    suspend fun insertBudget(budget: Budget): Long =
+        budgetDao.insertBudget(budget.copy(limitAmount = roundCents(budget.limitAmount)))
+    suspend fun updateBudget(budget: Budget) =
+        budgetDao.updateBudget(budget.copy(limitAmount = roundCents(budget.limitAmount)))
+
+    /**
+     * Copies [fromMonthKey]'s budgets into [toMonthKey] for categories that have no budget there
+     * yet. Runs in one database transaction, so a repeated tap can't create duplicates.
+     * Returns the number of budgets copied.
+     */
+    suspend fun copyBudgets(fromMonthKey: String, toMonthKey: String): Int {
+        return database.withTransaction {
+            val all = budgetDao.getAllBudgets().first()
+            val alreadySet = all.filter { it.monthKey == toMonthKey }.map { it.category }.toSet()
+            val toCopy = all.filter { it.monthKey == fromMonthKey && it.category !in alreadySet }
+            toCopy.forEach { budgetDao.insertBudget(it.copy(id = 0, monthKey = toMonthKey)) }
+            toCopy.size
+        }
+    }
     suspend fun deleteBudget(budget: Budget) = budgetDao.deleteBudget(budget)
 
     // --- Investments ---
-    suspend fun insertInvestment(investment: Investment): Long = investmentDao.insertInvestment(investment)
-    suspend fun updateInvestment(investment: Investment) = investmentDao.updateInvestment(investment)
+    suspend fun insertInvestment(investment: Investment): Long =
+        investmentDao.insertInvestment(investment.copy(currentValue = roundCents(investment.currentValue)))
+    suspend fun updateInvestment(investment: Investment) =
+        investmentDao.updateInvestment(investment.copy(currentValue = roundCents(investment.currentValue)))
     suspend fun deleteInvestment(investment: Investment) = investmentDao.deleteInvestment(investment)
 
     // --- Backup & Restore & Clear ---

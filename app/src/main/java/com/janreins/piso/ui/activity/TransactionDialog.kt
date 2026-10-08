@@ -69,7 +69,7 @@ fun TransactionDialog(
     categories: List<UserCategory> = emptyList(),
     subcategories: List<UserSubcategory> = emptyList(),
     onAddCategory: ((name: String, kind: String, onComplete: (String) -> Unit) -> Unit)? = null,
-    onAddSubcategory: ((parentName: String, name: String, onComplete: (String) -> Unit) -> Unit)? = null,
+    onAddSubcategory: ((parentName: String, parentKind: String, name: String, onComplete: (String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Transaction) -> Unit
 ) {
@@ -99,9 +99,11 @@ fun TransactionDialog(
     // previously reset the selection back to the default.
     var category by remember { mutableStateOf(defaultCategoryFor(type)) }
 
-    val availableSubcategories = remember(subcategories, category) {
+    val availableSubcategories = remember(subcategories, category, type) {
         subcategories.filter {
-            it.parentCategoryName.equals(category, ignoreCase = true) && !it.isArchived
+            it.parentCategoryName.equals(category, ignoreCase = true) &&
+                it.parentKind.equals(type, ignoreCase = true) &&
+                !it.isArchived
         }.map { it.name }
     }
 
@@ -552,7 +554,7 @@ fun TransactionDialog(
                     subcategory = existing
                     showQuickAddSubcategoryDialog = false
                 } else if (onAddSubcategory != null) {
-                    onAddSubcategory(category, newSubName) { createdSubName ->
+                    onAddSubcategory(category, type, newSubName) { createdSubName ->
                         subcategory = createdSubName
                         showQuickAddSubcategoryDialog = false
                     }

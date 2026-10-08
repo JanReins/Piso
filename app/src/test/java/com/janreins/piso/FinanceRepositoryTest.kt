@@ -5,10 +5,12 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.janreins.piso.data.local.AppDatabase
 import com.janreins.piso.data.models.Account
+import com.janreins.piso.data.models.Budget
 import com.janreins.piso.data.models.Debt
 import com.janreins.piso.data.models.Goal
 import com.janreins.piso.data.models.Transaction
 import com.janreins.piso.data.models.UserCategory
+import com.janreins.piso.data.models.UserSubcategory
 import com.janreins.piso.data.repository.FinanceRepository
 import com.janreins.piso.util.CurrencyUtil
 import kotlinx.coroutines.flow.first
@@ -135,7 +137,8 @@ class FinanceRepositoryTest {
         val updatedAccount = database.accountDao().getAccountById(accountId)
 
         assertEquals(7000.0, updatedGoal!!.currentAmount, 0.001)
-        assertEquals(8000.0, updatedAccount!!.balance, 0.001)
+        // The goal has no account of its own, so the money stays in the wallet, set aside
+        assertEquals(10000.0, updatedAccount!!.balance, 0.001)
         assertEquals(false, completed)
     }
 
@@ -199,7 +202,7 @@ class FinanceRepositoryTest {
         val goal = database.goalDao().getGoalById(goalId)!!
         assertEquals(1000.0, goal.currentAmount, 0.001)
         assertTrue(goal.isCompleted)
-        assertEquals(4000.0, database.accountDao().getAccountById(accountId)!!.balance, 0.001)
+        assertEquals(5000.0, database.accountDao().getAccountById(accountId)!!.balance, 0.001)
     }
 
     @Test
@@ -228,6 +231,176 @@ class FinanceRepositoryTest {
 
         val txs = repository.allTransactions.first()
         assertEquals("Misc", txs.single { it.type == "EXPENSE" }.category)
+        assertEquals("Other", txs.single { it.type == "INCOME" }.category)
+    }
+
+    // --- Balance soundness ---
+
+    private suspend fun balanceOf(accountId: Long) = database.accountDao().getAccountById(accountId)!!.balance
+
+    @Test
+    fun goalContributionMovesMoneyToGoalAccountWithoutChangingNetWorth() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 10000.0))
+        val savings = repository.insertAccount(Account(name = "Savings", kind = "Savings", balance = 0.0))
+        val goalId = repository.insertGoal(Goal(name = "Trip", targetAmount = 5000.0, accountId = savings))
+
+        repository.addMoneyToGoal(goalId, 2000.0, wallet)
+
+        assertEquals(8000.0, balanceOf(wallet), 0.001)
+        assertEquals(2000.0, balanceOf(savings), 0.001)
+        assertEquals(10000.0, repository.allAccounts.first().sumOf { it.balance }, 0.001)
+        assertEquals(2000.0, database.goalDao().getGoalById(goalId)!!.currentAmount, 0.001)
+
+        // Deleting the contribution puts everything back
+        repository.deleteTransaction(repository.allTransactions.first().single())
+        assertEquals(10000.0, balanceOf(wallet), 0.001)
+        assertEquals(0.0, balanceOf(savings), 0.001)
+        assertEquals(0.0, database.goalDao().getGoalById(goalId)!!.currentAmount, 0.001)
+    }
+
+    @Test
+    fun deletingTwiceOnlyRevertsOnce() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 1000.0))
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Food", amount = 200.0, accountId = wallet))
+        val tx = repository.allTransactions.first().single()
+
+        repository.deleteTransaction(tx)
+        repository.deleteTransaction(tx)
+
+        assertEquals(1000.0, balanceOf(wallet), 0.001)
+    }
+
+    @Test
+    fun updateRevertsStoredVersionNotCallersStaleCopy() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 1000.0))
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Food", amount = 100.0, accountId = wallet))
+        val original = repository.allTransactions.first().single()
+        repository.updateTransaction(original, original.copy(amount = 300.0))
+
+        // A second edit made from the same (now stale) snapshot
+        repository.updateTransaction(original, original.copy(amount = 50.0))
+
+        assertEquals(950.0, balanceOf(wallet), 0.001)
+    }
+
+    @Test
+    fun updatingDeletedTransactionChangesNothing() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 1000.0))
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Food", amount = 100.0, accountId = wallet))
+        val tx = repository.allTransactions.first().single()
+        repository.deleteTransaction(tx)
+
+        repository.updateTransaction(tx, tx.copy(amount = 400.0))
+
+        assertEquals(1000.0, balanceOf(wallet), 0.001)
+        assertTrue(repository.allTransactions.first().isEmpty())
+    }
+
+    @Test
+    fun amountsAreKeptToWholeCentavos() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 0.0))
+        repeat(10) {
+            repository.addTransaction(Transaction(type = "INCOME", category = "Gift", amount = 0.1, accountId = wallet))
+        }
+        assertEquals(1.0, balanceOf(wallet), 0.0) // exact, no 0.9999999999999999
+
+        val goalId = repository.insertGoal(Goal(name = "Snack", targetAmount = 0.8))
+        repository.addMoneyToGoal(goalId, 0.7, null)
+        val reached = repository.addMoneyToGoal(goalId, 0.1, null)
+        assertTrue(reached)
+    }
+
+    @Test
+    fun revertingKeepsGoalCompleteWhenStillAboveTarget() = runBlocking {
+        val goalId = repository.insertGoal(Goal(name = "Phone", targetAmount = 1000.0, currentAmount = 1500.0, isCompleted = true))
+        repository.addMoneyToGoal(goalId, 100.0, null)
+
+        repository.deleteTransaction(repository.allTransactions.first().single())
+
+        val goal = database.goalDao().getGoalById(goalId)!!
+        assertEquals(1500.0, goal.currentAmount, 0.001)
+        assertTrue(goal.isCompleted)
+    }
+
+    @Test
+    fun deletingGoalOrDebtDetachesItsTransactions() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 5000.0))
+        val goalId = repository.insertGoal(Goal(name = "Bike", targetAmount = 3000.0))
+        val debtId = repository.insertDebt(Debt(name = "Loan", kind = "Personal", originalAmount = 1000.0, remainingAmount = 1000.0))
+        repository.addMoneyToGoal(goalId, 500.0, wallet)
+        repository.recordDebtPayment(debtId, 200.0, wallet)
+
+        repository.deleteGoal(database.goalDao().getGoalById(goalId)!!)
+        repository.deleteDebt(database.debtDao().getDebtById(debtId)!!)
+
+        val txs = repository.allTransactions.first()
+        assertTrue(txs.all { it.goalId == null && it.debtId == null })
+        // Still recognisable as a savings move, so it stays out of spending totals
+        assertEquals("IN", txs.single { it.category == "Savings" }.goalFlow)
+    }
+
+    @Test
+    fun deletingAccountUnlinksGoals() = runBlocking {
+        val savings = repository.insertAccount(Account(name = "Savings", kind = "Savings", balance = 0.0))
+        val goalId = repository.insertGoal(Goal(name = "Trip", targetAmount = 5000.0, accountId = savings))
+
+        assertTrue(repository.deleteAccount(database.accountDao().getAccountById(savings)!!))
+
+        assertEquals(null, database.goalDao().getGoalById(goalId)!!.accountId)
+    }
+
+    @Test
+    fun editingAccountDetailsKeepsStoredBalance() = runBlocking {
+        val wallet = repository.insertAccount(Account(name = "Wallet", kind = "Cash", balance = 1000.0))
+        val staleCopy = database.accountDao().getAccountById(wallet)!!
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Food", amount = 250.0, accountId = wallet))
+
+        repository.updateAccount(staleCopy.copy(name = "Pocket"))
+
+        val acc = database.accountDao().getAccountById(wallet)!!
+        assertEquals("Pocket", acc.name)
+        assertEquals(750.0, acc.balance, 0.001)
+    }
+
+    @Test
+    fun copyingBudgetsTwiceDoesNotDuplicate() = runBlocking {
+        repository.insertBudget(Budget(category = "Food", limitAmount = 5000.0, monthKey = "2026-09"))
+        repository.insertBudget(Budget(category = "Transport", limitAmount = 2000.0, monthKey = "2026-09"))
+        repository.insertBudget(Budget(category = "Food", limitAmount = 6000.0, monthKey = "2026-10"))
+
+        assertEquals(1, repository.copyBudgets("2026-09", "2026-10"))
+        assertEquals(0, repository.copyBudgets("2026-09", "2026-10"))
+
+        val october = repository.allBudgets.first().filter { it.monthKey == "2026-10" }
+        assertEquals(2, october.size)
+        assertEquals(6000.0, october.single { it.category == "Food" }.limitAmount, 0.001) // not overwritten
+    }
+
+    // --- Subcategories belong to one category kind ---
+
+    @Test
+    fun subcategoriesOfSameNamedCategoriesStaySeparate() = runBlocking {
+        val expenseOther = UserCategory(name = "Other", kind = "EXPENSE")
+        val expenseId = repository.insertCategory(expenseOther)
+        repository.insertCategory(UserCategory(name = "Other", kind = "INCOME"))
+        val expenseSubId = repository.insertSubcategory(UserSubcategory(parentCategoryName = "Other", name = "Fees", parentKind = "EXPENSE"))
+        repository.insertSubcategory(UserSubcategory(parentCategoryName = "Other", name = "Fees", parentKind = "INCOME"))
+        repository.addTransaction(Transaction(type = "EXPENSE", category = "Other", subcategory = "Fees", amount = 10.0))
+        repository.addTransaction(Transaction(type = "INCOME", category = "Other", subcategory = "Fees", amount = 20.0))
+
+        // Renaming the expense subcategory leaves income transactions alone
+        val expenseSub = repository.allSubcategories.first().single { it.id == expenseSubId }
+        repository.updateSubcategoryName(expenseSub, "Bank fees")
+        var txs = repository.allTransactions.first()
+        assertEquals("Bank fees", txs.single { it.type == "EXPENSE" }.subcategory)
+        assertEquals("Fees", txs.single { it.type == "INCOME" }.subcategory)
+
+        // Renaming the expense category moves only its own subcategories
+        repository.updateCategoryName(expenseOther.copy(id = expenseId), "Misc")
+        val subs = repository.allSubcategories.first()
+        assertEquals("Misc", subs.single { it.parentKind == "EXPENSE" }.parentCategoryName)
+        assertEquals("Other", subs.single { it.parentKind == "INCOME" }.parentCategoryName)
+        txs = repository.allTransactions.first()
         assertEquals("Other", txs.single { it.type == "INCOME" }.category)
     }
 }

@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -39,6 +38,7 @@ data class HomeUiState(
     val openDebts: List<Debt> = emptyList(),
     val currentMonthCategorySpending: Map<String, Double> = emptyMap(),
     val userProfile: UserProfile = UserProfile(),
+    val currentMonthKey: String = DateUtil.getCurrentMonthKey(),
     val isEmpty: Boolean = false
 )
 
@@ -80,6 +80,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val openDebts = repository.openDebts
     private val investments = repository.allInvestments
     private val debts = repository.allDebts
+    private val currentMonthKey = DateUtil.currentMonthKeyFlow()
 
     private val netWorthSummary = combine(
         accounts,
@@ -98,8 +99,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private val currentMonthSummary = transactions.map { txList ->
-        val currentKey = DateUtil.getCurrentMonthKey()
+    private val currentMonthSummary = combine(transactions, currentMonthKey) { txList, currentKey ->
         var incomeSum = 0.0
         var spentSum = 0.0
         var goalMovesSum = 0.0
@@ -126,8 +126,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private val currentMonthCategorySpending = transactions.map { txList ->
-        val currentKey = DateUtil.getCurrentMonthKey()
+    private val currentMonthCategorySpending = combine(transactions, currentMonthKey) { txList, currentKey ->
         val spending = mutableMapOf<String, Double>()
         for (tx in txList) {
             val isGoalMove = tx.goalId != null || tx.goalFlow != null
@@ -139,8 +138,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         spending
     }
 
-    private val currentMonthSpendingBreakdown = transactions.map { txList ->
-        val currentKey = DateUtil.getCurrentMonthKey()
+    private val currentMonthSpendingBreakdown = combine(transactions, currentMonthKey) { txList, currentKey ->
         val expenseTxs = txList.filter {
             DateUtil.getMonthKey(it.dateMillis) == currentKey &&
                 it.type == "EXPENSE" &&
@@ -208,8 +206,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<HomeUiState> = combine(
         part1Flow,
         part2Flow,
-        userProfile
-    ) { p1, p2, profile ->
+        userProfile,
+        currentMonthKey
+    ) { p1, p2, profile, monthKey ->
         HomeUiState(
             isLoading = false,
             netWorthSummary = p1.netWorthSummary,
@@ -222,6 +221,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             openDebts = p2.openDebts,
             currentMonthCategorySpending = p2.currentMonthCategorySpending,
             userProfile = profile,
+            currentMonthKey = monthKey,
             isEmpty = p1.recentTransactions.isEmpty() && p2.accounts.isEmpty()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())

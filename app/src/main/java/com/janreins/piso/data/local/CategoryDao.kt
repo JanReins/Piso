@@ -39,8 +39,8 @@ interface CategoryDao {
     @Query("SELECT * FROM user_subcategories ORDER BY id ASC")
     fun getAllSubcategories(): Flow<List<UserSubcategory>>
 
-    @Query("SELECT * FROM user_subcategories WHERE parentCategoryName = :parentName ORDER BY id ASC")
-    fun getSubcategoriesForParent(parentName: String): Flow<List<UserSubcategory>>
+    @Query("SELECT * FROM user_subcategories WHERE parentCategoryName = :parentName AND parentKind = :parentKind ORDER BY id ASC")
+    fun getSubcategoriesForParent(parentName: String, parentKind: String): Flow<List<UserSubcategory>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubcategory(subcategory: UserSubcategory): Long
@@ -57,9 +57,12 @@ interface CategoryDao {
     @Query("DELETE FROM user_subcategories")
     suspend fun clearSubcategories()
 
+    @Query("DELETE FROM user_subcategories WHERE parentCategoryName = :parentName AND parentKind = :parentKind")
+    suspend fun deleteSubcategoriesForParent(parentName: String, parentKind: String)
+
     // --- Cascade Name Updates ---
-    @Query("UPDATE user_subcategories SET parentCategoryName = :newName WHERE parentCategoryName = :oldName")
-    suspend fun updateSubcategoriesParentName(oldName: String, newName: String)
+    @Query("UPDATE user_subcategories SET parentCategoryName = :newName WHERE parentCategoryName = :oldName AND parentKind = :parentKind")
+    suspend fun updateSubcategoriesParentName(oldName: String, newName: String, parentKind: String)
 
     @Query("UPDATE transactions SET category = :newName WHERE category = :oldName")
     suspend fun updateTransactionsCategoryName(oldName: String, newName: String)
@@ -67,8 +70,8 @@ interface CategoryDao {
     @Query("UPDATE transactions SET category = :newName WHERE category = :oldName AND type = :type")
     suspend fun updateTransactionsCategoryNameForType(oldName: String, newName: String, type: String)
 
-    @Query("UPDATE transactions SET subcategory = :newSubName WHERE category = :parentName AND subcategory = :oldSubName")
-    suspend fun updateTransactionsSubcategoryName(parentName: String, oldSubName: String, newSubName: String)
+    @Query("UPDATE transactions SET subcategory = :newSubName WHERE category = :parentName AND subcategory = :oldSubName AND type = :type")
+    suspend fun updateTransactionsSubcategoryName(parentName: String, oldSubName: String, newSubName: String, type: String)
 
     @Query("UPDATE budgets SET category = :newName WHERE category = :oldName")
     suspend fun updateBudgetsCategoryName(oldName: String, newName: String)
@@ -80,6 +83,6 @@ interface CategoryDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName AND type = :type")
     suspend fun countTransactionsForCategoryAndType(categoryName: String, type: String): Int
 
-    @Query("SELECT COUNT(*) FROM transactions WHERE category = :parentName AND subcategory = :subcategoryName")
-    suspend fun countTransactionsForSubcategory(parentName: String, subcategoryName: String): Int
+    @Query("SELECT COUNT(*) FROM transactions WHERE category = :parentName AND subcategory = :subcategoryName AND type = :type")
+    suspend fun countTransactionsForSubcategory(parentName: String, subcategoryName: String, type: String): Int
 }

@@ -56,6 +56,30 @@ class BackupDataTest {
     }
 
     @Test
+    fun olderBackupWithoutSubcategoryKindIsAssignedFromCategories() {
+        val json = """
+            {
+              "appName": "Piso",
+              "version": 2,
+              "categories": [
+                {"id": 1, "name": "Food", "kind": "EXPENSE"},
+                {"id": 2, "name": "Other", "kind": "EXPENSE"},
+                {"id": 3, "name": "Other", "kind": "INCOME"}
+              ],
+              "subcategories": [
+                {"id": 10, "parentCategoryName": "Food", "name": "Groceries"},
+                {"id": 11, "parentCategoryName": "Other", "name": "Misc"}
+              ]
+            }
+        """.trimIndent()
+
+        val subs = BackupData.fromJsonString(json)!!.subcategories
+        assertEquals("EXPENSE", subs.single { it.name == "Groceries" }.parentKind)
+        assertEquals(setOf("EXPENSE", "INCOME"), subs.filter { it.name == "Misc" }.map { it.parentKind }.toSet())
+        assertEquals(setOf(11L, 0L), subs.filter { it.name == "Misc" }.map { it.id }.toSet())
+    }
+
+    @Test
     fun fromJsonString_acceptsEmptyPisoBackup() {
         assertNotNull(BackupData.fromJsonString("""{"appName": "Piso", "version": 2}"""))
     }

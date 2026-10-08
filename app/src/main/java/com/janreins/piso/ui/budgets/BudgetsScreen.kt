@@ -66,7 +66,7 @@ fun BudgetsScreen(
     val categorySpending = uiState.currentMonthCategorySpending
     val breakdownMap = uiState.currentMonthBreakdownMap
 
-    val currentMonthKey = DateUtil.getCurrentMonthKey()
+    val currentMonthKey = uiState.currentMonthKey
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)
 
     val currentBudgets = remember(budgets, currentMonthKey) {

@@ -76,7 +76,7 @@ fun HomeScreen(
     val categorySpending = uiState.currentMonthCategorySpending
     val userProfile = uiState.userProfile
 
-    val currentMonthKey = DateUtil.getCurrentMonthKey()
+    val currentMonthKey = uiState.currentMonthKey
     val currentMonthName = DateUtil.getMonthDisplayName(currentMonthKey)
     val baseGreeting = DateUtil.getGreeting()
     val greeting = if (userProfile.displayName.isNotBlank()) "$baseGreeting, ${userProfile.displayName}" else baseGreeting
@@ -219,7 +219,7 @@ fun HomeScreen(
                             .padding(10.dp)
                     ) {
                         Text(
-                            text = "You also put ${CurrencyUtil.formatPeso(monthSummary.goalMoves)} toward goals — that money moved accounts, it isn’t extra spending.",
+                            text = "You also set aside ${CurrencyUtil.formatPeso(monthSummary.goalMoves)} for goals — that’s savings, not spending.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -728,7 +728,11 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = if (tx.type == "TRANSFER") "Transfer" else tx.category.ifBlank { tx.type },
+                                        text = when {
+                                            tx.type == "TRANSFER" && (tx.goalId != null || tx.goalFlow != null) -> "Savings"
+                                            tx.type == "TRANSFER" -> "Transfer"
+                                            else -> tx.category.ifBlank { tx.type }
+                                        },
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                                     )
                                     Text(

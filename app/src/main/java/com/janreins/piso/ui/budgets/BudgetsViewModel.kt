@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +26,7 @@ data class BudgetsUiState(
     val currentMonthCategorySpending: Map<String, Double> = emptyMap(),
     val currentMonthBreakdownMap: Map<String, CategorySpendingBreakdown> = emptyMap(),
     val categories: List<UserCategory> = emptyList(),
+    val currentMonthKey: String = DateUtil.getCurrentMonthKey(),
     val isEmpty: Boolean = false
 )
 
@@ -49,9 +49,9 @@ class BudgetsViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val transactions = repository.allTransactions
+    private val currentMonthKey = DateUtil.currentMonthKeyFlow()
 
-    val currentMonthCategorySpending: StateFlow<Map<String, Double>> = transactions.map { txList ->
-        val currentKey = DateUtil.getCurrentMonthKey()
+    val currentMonthCategorySpending: StateFlow<Map<String, Double>> = combine(transactions, currentMonthKey) { txList, currentKey ->
         val spending = mutableMapOf<String, Double>()
         for (tx in txList) {
             val isGoalMove = tx.goalId != null || tx.goalFlow != null
@@ -63,8 +63,7 @@ class BudgetsViewModel(application: Application) : AndroidViewModel(application)
         spending
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    private val currentMonthSpendingBreakdown: StateFlow<List<CategorySpendingBreakdown>> = transactions.map { txList ->
-        val currentKey = DateUtil.getCurrentMonthKey()
+    private val currentMonthSpendingBreakdown: StateFlow<List<CategorySpendingBreakdown>> = combine(transactions, currentMonthKey) { txList, currentKey ->
         val expenseTxs = txList.filter {
             DateUtil.getMonthKey(it.dateMillis) == currentKey &&
                 it.type == "EXPENSE" &&
@@ -118,14 +117,16 @@ class BudgetsViewModel(application: Application) : AndroidViewModel(application)
         budgets,
         currentMonthCategorySpending,
         currentMonthBreakdownMap,
-        categories
-    ) { bdgts, spending, breakdown, cats ->
+        categories,
+        currentMonthKey
+    ) { bdgts, spending, breakdown, cats, monthKey ->
         BudgetsUiState(
             isLoading = false,
             budgets = bdgts,
             currentMonthCategorySpending = spending,
             currentMonthBreakdownMap = breakdown,
             categories = cats,
+            currentMonthKey = monthKey,
             isEmpty = bdgts.isEmpty()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BudgetsUiState())
@@ -155,15 +156,13 @@ class BudgetsViewModel(application: Application) : AndroidViewModel(application)
     fun copyBudgetsFromPreviousMonth(targetMonthKey: String) {
         viewModelScope.launch {
             val previousMonthKey = DateUtil.shiftMonthKey(targetMonthKey, -1)
-            val all = repository.allBudgets.first()
-            val alreadySet = all.filter { it.monthKey == targetMonthKey }.map { it.category }.toSet()
-            val toCopy = all.filter { it.monthKey == previousMonthKey && it.category !in alreadySet }
-            if (toCopy.isEmpty()) {
-                showMessage("No budgets from ${DateUtil.getMonthDisplayName(previousMonthKey)} to copy")
-                return@launch
+            val previousName = DateUtil.getMonthDisplayName(previousMonthKey)
+            val copied = repository.copyBudgets(fromMonthKey = previousMonthKey, toMonthKey = targetMonthKey)
+            if (copied == 0) {
+                showMessage("No budgets from $previousName to copy")
+            } else {
+                showMessage("Copied $copied budget${if (copied == 1) "" else "s"} from $previousName")
             }
-            toCopy.forEach { repository.insertBudget(it.copy(id = 0, monthKey = targetMonthKey)) }
-            showMessage("Copied ${toCopy.size} budget${if (toCopy.size == 1) "" else "s"} from ${DateUtil.getMonthDisplayName(previousMonthKey)}")
         }
     }
 

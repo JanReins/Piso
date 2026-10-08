@@ -345,8 +345,8 @@ fun PisoApp(
                     if (success) onComplete(name.trim()) else error?.let(activityViewModel::showMessage)
                 }
             },
-            onAddSubcategory = { parent, name, onComplete ->
-                activityViewModel.addSubcategory(parent, name) { success, error ->
+            onAddSubcategory = { parent, kind, name, onComplete ->
+                activityViewModel.addSubcategory(parent, kind, name) { success, error ->
                     if (success) onComplete(name.trim()) else error?.let(activityViewModel::showMessage)
                 }
             },
