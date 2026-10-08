@@ -3,8 +3,6 @@ package com.janreins.piso.util
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
